@@ -77,14 +77,18 @@ const DEFAULT_DATA = {
     "Des voyages magiques et des aventures inoubliables ensemble ✈️",
     "Mon amour infini, toujours à tes côtés quoi qu'il arrive 💖"
   ],
-  photos: []
+  photos: [],
+  music: {
+    url: null,
+    name: "Mélodie romantique féerique"
+  }
 };
 
 export default function App() {
   const [siteData, setSiteData] = useState(() => {
     try {
       const saved = localStorage.getItem('birthday_data_react');
-      if (saved) return JSON.parse(saved);
+      if (saved) return { ...DEFAULT_DATA, ...JSON.parse(saved) };
     } catch (e) {
       console.warn("Storage load error:", e);
     }
@@ -93,8 +97,8 @@ export default function App() {
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [currentChapter, setCurrentChapter] = useState(1);
-  const [customMusicUrl, setCustomMusicUrl] = useState(null);
-  const [customMusicName, setCustomMusicName] = useState(null);
+  const [customMusicUrl, setCustomMusicUrl] = useState(() => siteData.music?.url || null);
+  const [customMusicName, setCustomMusicName] = useState(() => siteData.music?.name || null);
   const [autoPlayMusic, setAutoPlayMusic] = useState(false);
   const [showGoldenFlash, setShowGoldenFlash] = useState(false);
 
@@ -109,7 +113,7 @@ export default function App() {
   // Chargement persistant au démarrage (Musique + Configuration complète)
   useEffect(() => {
     async function initPersistentData() {
-      // 1. Charger la musique MP3 persistante depuis IndexedDB
+      // 1. Charger la musique MP3 persistante locale depuis IndexedDB
       try {
         const savedAudio = await loadPersistentAudio();
         if (savedAudio && savedAudio.url) {
@@ -124,20 +128,29 @@ export default function App() {
       try {
         const idbConfig = await loadPersistentConfig();
         if (idbConfig) {
-          setSiteData(idbConfig);
+          setSiteData(prev => ({ ...prev, ...idbConfig }));
+          if (idbConfig.music?.url) {
+            setCustomMusicUrl(idbConfig.music.url);
+            setCustomMusicName(idbConfig.music.name);
+          }
         }
       } catch (e) {
         console.warn("Erreur chargement config IndexedDB:", e);
       }
 
-      // 3. Synchronisation cloud silencieuse Supabase
+      // 3. Synchronisation cloud Supabase (priorité absolue si connectée)
       if (isSupabaseConfigured()) {
         try {
           const cloudConfig = await fetchBirthdayConfig();
           if (cloudConfig) {
-            setSiteData(cloudConfig);
-            localStorage.setItem('birthday_data_react', JSON.stringify(cloudConfig));
-            await savePersistentConfig(cloudConfig);
+            const merged = { ...DEFAULT_DATA, ...cloudConfig };
+            setSiteData(merged);
+            if (cloudConfig.music?.url) {
+              setCustomMusicUrl(cloudConfig.music.url);
+              setCustomMusicName(cloudConfig.music.name);
+            }
+            localStorage.setItem('birthday_data_react', JSON.stringify(merged));
+            await savePersistentConfig(merged);
           }
         } catch (e) {
           console.warn("Erreur sync Supabase silencieuse:", e);
@@ -148,37 +161,54 @@ export default function App() {
     initPersistentData();
   }, []);
 
-  // Sauvegarde persistante (IndexedDB + LocalStorage + Supabase)
+  // Sauvegarde persistante (IndexedDB + LocalStorage + Supabase Cloud)
   const handleSaveData = async (newData) => {
-    setSiteData(newData);
+    const dataToSave = {
+      ...newData,
+      music: {
+        url: customMusicUrl || newData.music?.url || null,
+        name: customMusicName || newData.music?.name || "Mélodie romantique féerique"
+      }
+    };
+
+    setSiteData(dataToSave);
 
     // 1. LocalStorage
     try {
-      localStorage.setItem('birthday_data_react', JSON.stringify(newData));
+      localStorage.setItem('birthday_data_react', JSON.stringify(dataToSave));
     } catch (e) {
       console.warn("Storage save error:", e);
     }
 
-    // 2. IndexedDB (sécurité maximale contre les quotas)
+    // 2. IndexedDB
     try {
-      await savePersistentConfig(newData);
+      await savePersistentConfig(dataToSave);
     } catch (e) {
       console.warn("IndexedDB save error:", e);
     }
 
-    // 3. Supabase Cloud (silencieux)
+    // 3. Supabase Cloud
     if (isSupabaseConfigured()) {
       try {
-        await saveBirthdayConfig(newData);
+        const result = await saveBirthdayConfig(dataToSave);
+        if (!result?.success) {
+          console.warn("Avertissement sauvegarde Supabase:", result?.error);
+        }
       } catch (e) {
-        console.warn("Supabase save error (ignoré):", e);
+        console.warn("Supabase save error:", e);
       }
     }
   };
 
-  const handleMusicChange = (blobUrl, name) => {
-    setCustomMusicUrl(blobUrl);
+  const handleMusicChange = (url, name) => {
+    setCustomMusicUrl(url);
     setCustomMusicName(name);
+
+    const updated = {
+      ...siteData,
+      music: { url, name }
+    };
+    handleSaveData(updated);
   };
 
   const handleUnlockGateway = () => {

@@ -36,6 +36,9 @@ export default function SecretAdminModal({
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
   const [newPhotoCaption, setNewPhotoCaption] = useState('');
 
+  // Musique via URL directe
+  const [musicLinkInput, setMusicLinkInput] = useState('');
+
   const flowerTimerRef = useRef(null);
   const pinInputRef = useRef(null);
 
@@ -114,6 +117,7 @@ export default function SecretAdminModal({
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (e) {
       console.warn("Erreur sauvegarde:", e);
+      alert("Erreur lors de la sauvegarde : " + (e.message || e));
     } finally {
       setIsSaving(false);
     }
@@ -129,10 +133,11 @@ export default function SecretAdminModal({
 
     try {
       const result = await savePersistentAudio(file);
-      if (result && result.blobUrl) {
+      if (result) {
+        const effectiveUrl = result.cloudUrl || result.blobUrl;
         setMusicFileName(result.name);
         if (typeof onMusicChange === 'function') {
-          onMusicChange(result.blobUrl, result.name, result.cloudUrl);
+          onMusicChange(effectiveUrl, result.name);
         }
         setMusicUploadSuccess(true);
         setTimeout(() => setMusicUploadSuccess(false), 4000);
@@ -142,9 +147,22 @@ export default function SecretAdminModal({
       alert("Impossible d'enregistrer ce fichier audio. Réessaie avec un fichier MP3.");
     } finally {
       setIsUploadingMusic(false);
-      // Réinitialiser le champ pour permettre de re-sélectionner le même fichier si besoin
       e.target.value = '';
     }
+  };
+
+  // Appliquer une URL directe de musique
+  const handleApplyMusicUrl = () => {
+    if (!musicLinkInput.trim()) return;
+    const url = musicLinkInput.trim();
+    const name = url.split('/').pop()?.split('?')[0] || "Musique personnalisée (Lien direct)";
+    setMusicFileName(name);
+    if (typeof onMusicChange === 'function') {
+      onMusicChange(url, name);
+    }
+    setMusicUploadSuccess(true);
+    setMusicLinkInput('');
+    setTimeout(() => setMusicUploadSuccess(false), 4000);
   };
 
   // Réinitialiser la musique et revenir à la berceuse romantique par défaut
@@ -157,7 +175,7 @@ export default function SecretAdminModal({
     const defaultName = "Mélodie romantique féerique (intégrée)";
     setMusicFileName(defaultName);
     if (typeof onMusicChange === 'function') {
-      onMusicChange(null, defaultName, null);
+      onMusicChange(null, defaultName);
     }
   };
 
@@ -892,6 +910,45 @@ export default function SecretAdminModal({
                       style={{ display: 'none' }}
                     />
                   </label>
+
+                  {/* Option URL audio directe */}
+                  <div style={{ marginTop: '16px', background: '#fafafa', border: '1px solid #f3f4f6', borderRadius: '14px', padding: '14px' }}>
+                    <p style={{ fontSize: '12px', fontWeight: '800', color: '#374151', margin: '0 0 8px' }}>
+                      🔗 Ou colle directement un lien MP3 (URL web) :
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input 
+                        type="url" 
+                        placeholder="https://.../musique.mp3"
+                        value={musicLinkInput}
+                        onChange={e => setMusicLinkInput(e.target.value)}
+                        style={{ 
+                          flex: 1, 
+                          padding: '10px 12px', 
+                          borderRadius: '10px', 
+                          border: '1px solid #e5e7eb', 
+                          fontSize: '13px',
+                          background: '#ffffff'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyMusicUrl}
+                        style={{ 
+                          padding: '10px 16px', 
+                          background: 'var(--rose-600)', 
+                          color: '#ffffff', 
+                          border: 'none', 
+                          borderRadius: '10px', 
+                          fontWeight: '700', 
+                          fontSize: '12px', 
+                          cursor: 'pointer' 
+                        }}
+                      >
+                        Appliquer
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Message de confirmation instantanée après upload */}
                   {musicUploadSuccess && (
