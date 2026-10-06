@@ -182,90 +182,85 @@ export default function SecretAdminModal({
                 Espace Personnalisation
               </h3>
               <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
-                Entre le code secret à 4 chiffres (indice : 1202) :
+                Entre le code secret à 4 chiffres :
               </p>
 
-              {/* Champ PIN interactif (clavier physique + virtuel) */}
-              <input 
-                ref={pinInputRef}
-                type="password"
-                maxLength={4}
-                value={pin}
-                onKeyDown={handleKeyDownPin}
-                onChange={e => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                  setPin(val);
-                  setPinError(false);
-                }}
-                placeholder="••••"
-                style={{
-                  width: '160px',
-                  height: '48px',
-                  fontSize: '28px',
-                  textAlign: 'center',
-                  letterSpacing: '0.35em',
-                  borderRadius: '14px',
-                  border: pinError ? '2px solid #ef4444' : '2px solid #fbcfe8',
-                  background: '#fdf2f8',
-                  outline: 'none',
-                  marginBottom: '12px',
-                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
-                  color: '#831843'
-                }}
-              />
-
-              {pinError && (
-                <motion.p 
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{ color: '#ef4444', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}
-                >
-                  ❌ Code incorrect. Réessaie !
-                </motion.p>
-              )}
-
-              {/* Clavier numérique */}
-              <div className="pin-keypad">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                  <button 
-                    key={num} 
-                    className="keypad-button"
-                    onClick={() => { 
-                      if (pin.length < 4) {
-                        setPin(prev => prev + num); 
-                        setPinError(false);
+              {/* Formulaire avec clavier natif PC & Téléphone */}
+              <form onSubmit={e => { e.preventDefault(); handlePinSubmit(); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <input 
+                  ref={pinInputRef}
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
+                  maxLength={4}
+                  value={pin}
+                  onKeyDown={handleKeyDownPin}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setPin(val);
+                    setPinError(false);
+                    if (val.length === 4) {
+                      if (val === '1202') {
+                        setTimeout(() => {
+                          setShowPinModal(false);
+                          setShowDrawer(true);
+                          setFormData(data);
+                          setPinError(false);
+                        }, 150);
+                      } else {
+                        setPinError(true);
+                        setTimeout(() => setPin(''), 700);
                       }
-                    }}
-                  >
-                    {num}
-                  </button>
-                ))}
-                <button 
-                  className="keypad-button keypad-clear" 
-                  onClick={() => { setPin(''); setPinError(false); }}
-                  title="Effacer"
-                >
-                  C
-                </button>
-                <button 
-                  className="keypad-button" 
-                  onClick={() => { 
-                    if (pin.length < 4) {
-                      setPin(prev => prev + '0'); 
-                      setPinError(false);
                     }
                   }}
-                >
-                  0
-                </button>
+                  placeholder="••••"
+                  autoFocus
+                  style={{
+                    width: '180px',
+                    height: '52px',
+                    fontSize: '32px',
+                    textAlign: 'center',
+                    letterSpacing: '0.4em',
+                    borderRadius: '16px',
+                    border: pinError ? '2px solid #ef4444' : '2px solid #fbcfe8',
+                    background: '#fdf2f8',
+                    outline: 'none',
+                    marginBottom: '14px',
+                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
+                    color: '#831843'
+                  }}
+                />
+
+                {pinError && (
+                  <motion.p 
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    style={{ color: '#ef4444', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}
+                  >
+                    ❌ Code incorrect. Réessaie !
+                  </motion.p>
+                )}
+
                 <button 
-                  className="keypad-button keypad-submit" 
-                  onClick={handlePinSubmit}
-                  title="Valider"
+                  type="submit"
+                  style={{
+                    width: '180px',
+                    padding: '12px',
+                    background: 'linear-gradient(135deg, #e11d48, #be123c)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '14px',
+                    fontWeight: '800',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(225, 29, 72, 0.25)',
+                    transition: 'transform 0.15s ease'
+                  }}
                 >
-                  ✓
+                  Valider
                 </button>
-              </div>
+              </form>
             </motion.div>
           </motion.div>
         )}
