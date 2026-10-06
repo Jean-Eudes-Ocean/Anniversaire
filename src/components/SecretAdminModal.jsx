@@ -3,14 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   uploadPhotoToSupabase 
 } from '../lib/supabase';
-import { savePersistentAudio, removePersistentAudio } from '../lib/storage';
 
 export default function SecretAdminModal({ 
   data, 
-  onSave, 
-  onMusicChange, 
-  currentMusicName,
-  currentMusicUrl 
+  onSave
 }) {
   const [flowerTaps, setFlowerTaps] = useState(0);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -23,21 +19,11 @@ export default function SecretAdminModal({
   const [formData, setFormData] = useState(data);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Audio preview state
-  const [musicFileName, setMusicFileName] = useState(currentMusicName || "Mélodie romantique féerique (intégrée)");
-  const [isUploadingMusic, setIsUploadingMusic] = useState(false);
-  const [musicUploadSuccess, setMusicUploadSuccess] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [previewPlaying, setPreviewPlaying] = useState(false);
-  const previewAudioRef = useRef(null);
 
   // Photo URL input
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
   const [newPhotoCaption, setNewPhotoCaption] = useState('');
-
-  // Musique via URL directe
-  const [musicLinkInput, setMusicLinkInput] = useState('');
 
   const flowerTimerRef = useRef(null);
   const pinInputRef = useRef(null);
@@ -123,95 +109,6 @@ export default function SecretAdminModal({
     }
   };
 
-  // Upload musique avec persistance permanente garantie
-  const handleMusicUpload = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-
-    setIsUploadingMusic(true);
-    setMusicUploadSuccess(false);
-
-    try {
-      const result = await savePersistentAudio(file);
-      if (result) {
-        // blobUrl = pour écoute immédiate sur CET appareil uniquement
-        // cloudUrl = URL Supabase Storage permanente (fonctionnel sur tous appareils/recharges)
-        const localUrl = result.blobUrl; // blob:// = écoute locale immédiate
-        const cloudUrl = result.cloudUrl || null; // https:// ou null si bucket non configuré
-        setMusicFileName(result.name);
-        if (typeof onMusicChange === 'function') {
-          // On passe : localUrl pour lecture, name, cloudUrl pour sauvegarde Supabase
-          onMusicChange(localUrl, result.name, cloudUrl);
-        }
-        setMusicUploadSuccess(true);
-        setTimeout(() => setMusicUploadSuccess(false), 4000);
-      }
-    } catch (err) {
-      console.error("Erreur enregistrement musique:", err);
-      alert("Impossible d'enregistrer ce fichier audio. Réessaie avec un fichier MP3.");
-    } finally {
-      setIsUploadingMusic(false);
-      e.target.value = '';
-    }
-  };
-
-  // Appliquer une URL directe de musique (URL web publique = comme un cloudUrl)
-  const handleApplyMusicUrl = () => {
-    if (!musicLinkInput.trim()) return;
-    const url = musicLinkInput.trim();
-    if (!url.startsWith('http')) {
-      alert("Veuillez coller une URL web valide commençant par https://");
-      return;
-    }
-    const name = url.split('/').pop()?.split('?')[0] || "Musique personnalisée (Lien direct)";
-    setMusicFileName(name);
-    if (typeof onMusicChange === 'function') {
-      // L'URL web est déjà une URL cloud publique : locale = cloud = même url
-      onMusicChange(url, name, url);
-    }
-    setMusicUploadSuccess(true);
-    setMusicLinkInput('');
-    setTimeout(() => setMusicUploadSuccess(false), 4000);
-  };
-
-  // Réinitialiser la musique et revenir à la chanson intégrée par défaut
-  const handleResetMusic = async () => {
-    if (previewPlaying && previewAudioRef.current) {
-      previewAudioRef.current.pause();
-      setPreviewPlaying(false);
-    }
-    await removePersistentAudio();
-    const defaultName = "Alex Warren - Ordinary (Chanson intégrée)";
-    setMusicFileName(defaultName);
-    if (typeof onMusicChange === 'function') {
-      onMusicChange(null, defaultName);
-    }
-  };
-
-  // Lecture / Pause de l'aperçu audio dans le panneau admin
-  const togglePreviewAudio = () => {
-    const audioSrc = currentMusicUrl || '/song.mp3';
-
-    if (!previewAudioRef.current) {
-      previewAudioRef.current = new Audio(audioSrc);
-      previewAudioRef.current.onended = () => setPreviewPlaying(false);
-    } else {
-      if (previewAudioRef.current.src !== audioSrc && !previewAudioRef.current.src.endsWith(audioSrc)) {
-        previewAudioRef.current.src = audioSrc;
-      }
-    }
-
-    if (previewPlaying) {
-      previewAudioRef.current.pause();
-      setPreviewPlaying(false);
-    } else {
-      previewAudioRef.current.play()
-        .then(() => setPreviewPlaying(true))
-        .catch(e => console.warn("Erreur lecture aperçu:", e));
-    }
-  };
-
-  // Upload photos (fichiers locaux ou URLs)
   // Upload photos (stockage ultra-rapide et optimisé dans Supabase Storage)
   const handlePhotoUpload = async (e) => {
     const files = e.target.files;
@@ -431,8 +328,7 @@ export default function SecretAdminModal({
                 { id: 'textes', label: '✍️ Textes' },
                 { id: 'raisons', label: '💖 Raisons' },
                 { id: 'voeux', label: '🌠 Vœux' },
-                { id: 'photos', label: '📷 Photos' },
-                { id: 'musique', label: '🎵 Musique' }
+                { id: 'photos', label: '📷 Photos' }
               ].map(tab => (
                 <button 
                   key={tab.id}
@@ -797,182 +693,6 @@ export default function SecretAdminModal({
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {/* ================= Onglet 5 : Musique d'ambiance avec PERSISTANCE PERMANENTE ================= */}
-              {activeTab === 'musique' && (
-                <div>
-                  <div style={{ background: '#fff5f8', padding: '14px', borderRadius: '14px', marginBottom: '18px', border: '1px solid #fbcfe8' }}>
-                    <p style={{ fontSize: '13px', color: 'var(--rose-700)', margin: '0 0 6px', fontWeight: '700' }}>
-                      🎵 Musique d'ambiance officielle
-                    </p>
-                    <p style={{ fontSize: '12px', color: '#6b7280', margin: 0, lineHeight: 1.5 }}>
-                      <strong>Alex Warren - Ordinary</strong> est désormais intégrée directement au site ! Elle est garantie de jouer instantanément sur son téléphone et sur tous les appareils, sans dépendre d'aucune base de données.
-                    </p>
-                  </div>
-
-                  {/* Carte d'état de la musique active */}
-                  <div style={{ 
-                    padding: '16px', 
-                    background: '#ffffff', 
-                    borderRadius: '16px', 
-                    border: '1.5px solid #fce7f3', 
-                    boxShadow: '0 4px 15px rgba(244, 114, 182, 0.08)',
-                    marginBottom: '20px' 
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '26px' }}>🎧</span>
-                        <div>
-                          <p style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', fontWeight: '800', margin: 0 }}>
-                            Chanson d'amour intégrée :
-                          </p>
-                          <p style={{ fontSize: '14px', fontWeight: '800', color: 'var(--rose-700)', margin: '2px 0 0' }}>
-                            {musicFileName || "Alex Warren - Ordinary"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Mini lecteur d'écoute intégrée */}
-                      <button
-                        onClick={togglePreviewAudio}
-                        style={{
-                          padding: '8px 14px',
-                          background: previewPlaying ? '#ef4444' : 'var(--rose-600)',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '10px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                        title="Tester l'écoute de cette musique"
-                      >
-                        {previewPlaying ? '⏸ Pause' : '▶ Écouter'}
-                      </button>
-                    </div>
-
-                    {/* Bouton pour revenir à la mélodie intégrée si personnalisée */}
-                    {customMusicUrl && (
-                      <div style={{ borderTop: '1px solid #f9fafb', paddingTop: '10px', marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button 
-                          onClick={handleResetMusic}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#ef4444',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            fontWeight: '700',
-                            padding: '4px 0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          ↺ Revenir à la chanson intégrée (Ordinary)
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Zone d'importation de fichier MP3 */}
-                  <label 
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '28px 20px',
-                      border: '2px dashed #f472b6',
-                      borderRadius: '16px',
-                      background: '#fff9fb',
-                      cursor: 'pointer',
-                      textAlign: 'center',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <span style={{ fontSize: '36px', marginBottom: '8px' }}>🎼</span>
-                    <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--rose-700)' }}>
-                      {isUploadingMusic ? "⏳ Sauvegarde permanente du fichier audio en cours..." : "Clique ici pour importer ta musique (MP3)"}
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
-                      (Prend en charge tous les fichiers .mp3, .wav, .m4a, .aac)
-                    </span>
-                    <input 
-                      type="file" 
-                      accept="audio/*"
-                      onChange={handleMusicUpload}
-                      disabled={isUploadingMusic}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
-
-                  {/* Option URL audio directe */}
-                  <div style={{ marginTop: '16px', background: '#fafafa', border: '1px solid #f3f4f6', borderRadius: '14px', padding: '14px' }}>
-                    <p style={{ fontSize: '12px', fontWeight: '800', color: '#374151', margin: '0 0 8px' }}>
-                      🔗 Ou colle directement un lien MP3 (URL web) :
-                    </p>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input 
-                        type="url" 
-                        placeholder="https://.../musique.mp3"
-                        value={musicLinkInput}
-                        onChange={e => setMusicLinkInput(e.target.value)}
-                        style={{ 
-                          flex: 1, 
-                          padding: '10px 12px', 
-                          borderRadius: '10px', 
-                          border: '1px solid #e5e7eb', 
-                          fontSize: '13px',
-                          background: '#ffffff'
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleApplyMusicUrl}
-                        style={{ 
-                          padding: '10px 16px', 
-                          background: 'var(--rose-600)', 
-                          color: '#ffffff', 
-                          border: 'none', 
-                          borderRadius: '10px', 
-                          fontWeight: '700', 
-                          fontSize: '12px', 
-                          cursor: 'pointer' 
-                        }}
-                      >
-                        Appliquer
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Message de confirmation instantanée après upload */}
-                  {musicUploadSuccess && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      style={{ 
-                        marginTop: '16px', 
-                        padding: '12px', 
-                        background: '#ecfdf5', 
-                        border: '1px solid #a7f3d0', 
-                        borderRadius: '12px',
-                        textAlign: 'center' 
-                      }}
-                    >
-                      <p style={{ color: '#065f46', fontSize: '13px', fontWeight: '700', margin: '0 0 4px' }}>
-                        ✅ Musique enregistrée sur cet appareil !
-                      </p>
-                      <p style={{ color: '#047857', fontSize: '11px', margin: 0 }}>
-                        Pour qu'elle joue aussi sur le téléphone de ta copine, clique sur « Enregistrer toutes les modifications » ci-dessous. 💖
-                      </p>
-                    </motion.div>
-                  )}
                 </div>
               )}
             </div>

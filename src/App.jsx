@@ -277,14 +277,10 @@ export default function App() {
       <SecretAdminModal 
         data={siteData} 
         onSave={handleSaveData} 
-        onMusicChange={handleMusicChange}
-        currentMusicName={customMusicName}
-        currentMusicUrl={customMusicUrl}
       />
 
-      {/* Lecteur de musique flottant */}
+      {/* Lecteur de musique flottant (chanson intégrée) */}
       <AudioPlayer 
-        customAudioUrl={customMusicUrl} 
         autoPlayTrigger={autoPlayMusic} 
       />
 
