@@ -32,12 +32,6 @@ export default function SecretAdminModal({
     setFormData(data);
   }, [data]);
 
-  useEffect(() => {
-    if (currentMusicName) {
-      setMusicFileName(currentMusicName);
-    }
-  }, [currentMusicName]);
-
   // Focus automatique du champ PIN à l'ouverture
   useEffect(() => {
     if (showPinModal && pinInputRef.current) {
