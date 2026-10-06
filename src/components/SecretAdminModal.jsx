@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  uploadPhotoToSupabase 
+  uploadPhotoToSupabase,
+  diagnoseSyncStatus
 } from '../lib/supabase';
 
 export default function SecretAdminModal({ 
@@ -21,6 +22,8 @@ export default function SecretAdminModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(''); // '' | 'uploading' | 'done' | 'error'
+  const [diagStatus, setDiagStatus] = useState(null);   // null | objet de diagnostic
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
 
   // Photo URL input
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
@@ -99,16 +102,17 @@ export default function SecretAdminModal({
     }
   };
 
-  // Upload photos avec auto-sauvegarde immédiate dans Supabase
+  // Upload photos avec auto-sauvegarde immédiate dans Supabase Storage
   const handlePhotoUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploadingPhoto(true);
     setUploadStatus('uploading');
+    setDiagStatus(null);
 
     let newPhotos = [];
-    let hasError = false;
+    let failedFiles = [];
 
     for (const file of Array.from(files)) {
       try {
@@ -116,43 +120,55 @@ export default function SecretAdminModal({
         if (publicUrl) {
           newPhotos.push({ url: publicUrl, caption: file.name.replace(/\.[^/.]+$/, '') });
         } else {
-          hasError = true;
-          console.warn(`Upload échoué pour : ${file.name}`);
+          failedFiles.push(file.name);
         }
       } catch (err) {
-        hasError = true;
+        failedFiles.push(file.name);
         console.warn('Upload photo error:', err);
       }
     }
 
     if (newPhotos.length > 0) {
-      // Mise à jour du formData avec les nouvelles photos
       const updatedData = {
         ...formDataRef.current,
         photos: [...(formDataRef.current.photos || []), ...newPhotos]
       };
       setFormData(updatedData);
 
-      // ✅ Auto-sauvegarde immédiate — pas besoin de cliquer "Sauvegarder"
       try {
         setIsSaving(true);
         await onSave(updatedData);
         setUploadStatus('done');
-        setTimeout(() => setUploadStatus(''), 4000);
+        setTimeout(() => setUploadStatus(''), 5000);
       } catch (err) {
         console.warn('Auto-save error after photo upload:', err);
-        setUploadStatus('error');
-        setTimeout(() => setUploadStatus(''), 5000);
+        setUploadStatus('save_error');
+        setTimeout(() => setUploadStatus(''), 6000);
       } finally {
         setIsSaving(false);
       }
-    } else if (hasError) {
-      setUploadStatus('error');
-      setTimeout(() => setUploadStatus(''), 5000);
+    } else if (failedFiles.length > 0) {
+      // Aucun upload réussi → problème avec le bucket Storage
+      setUploadStatus('storage_error');
+      setTimeout(() => setUploadStatus(''), 8000);
     }
 
     setIsUploadingPhoto(false);
     e.target.value = '';
+  };
+
+  // Diagnostic : vérifier l'état de Supabase en temps réel
+  const handleDiagnose = async () => {
+    setIsDiagnosing(true);
+    setDiagStatus(null);
+    try {
+      const result = await diagnoseSyncStatus();
+      setDiagStatus(result);
+    } catch (err) {
+      setDiagStatus({ error: err.message });
+    } finally {
+      setIsDiagnosing(false);
+    }
   };
 
   const handleAddPhotoByUrl = () => {
@@ -647,24 +663,50 @@ export default function SecretAdminModal({
                         marginBottom: '14px',
                         background: uploadStatus === 'done'
                           ? '#f0fdf4'
-                          : uploadStatus === 'error'
+                          : (uploadStatus === 'error' || uploadStatus === 'storage_error' || uploadStatus === 'save_error')
                           ? '#fef2f2'
                           : '#fdf2f8',
-                        border: `1px solid ${uploadStatus === 'done' ? '#bbf7d0' : uploadStatus === 'error' ? '#fecaca' : '#fbcfe8'}`
+                        border: `1px solid ${
+                          uploadStatus === 'done' 
+                            ? '#bbf7d0' 
+                            : (uploadStatus === 'error' || uploadStatus === 'storage_error' || uploadStatus === 'save_error')
+                            ? '#fecaca' 
+                            : '#fbcfe8'
+                        }`
                       }}
                     >
                       {(isUploadingPhoto || uploadStatus === 'uploading') && (
                         <p style={{ color: 'var(--rose-600)', fontSize: '13px', fontWeight: '700', margin: 0 }}>
-                          ⏳ Upload et sauvegarde automatique en cours...
+                          ⏳ Upload et synchronisation automatique en cours...
                         </p>
                       )}
                       {uploadStatus === 'done' && !isUploadingPhoto && (
                         <>
                           <p style={{ color: '#16a34a', fontSize: '13px', fontWeight: '800', margin: '0 0 2px' }}>
-                            ✅ Photos sauvegardées automatiquement !
+                            ✅ Photos enregistrées sur le Cloud !
                           </p>
                           <p style={{ color: '#6b7280', fontSize: '11px', margin: 0 }}>
-                            Elles sont maintenant visibles sur tous les appareils 📱💻
+                            Elles sont désormais visibles sur tous tes appareils (PC, téléphone) 📱💻
+                          </p>
+                        </>
+                      )}
+                      {uploadStatus === 'storage_error' && !isUploadingPhoto && (
+                        <>
+                          <p style={{ color: '#dc2626', fontSize: '13px', fontWeight: '800', margin: '0 0 2px' }}>
+                            ❌ Impossible d'envoyer l'image vers Supabase Storage
+                          </p>
+                          <p style={{ color: '#991b1b', fontSize: '11px', margin: 0 }}>
+                            Vérifie les permissions (RLS) du bucket 'birthday-photos' ou ta connexion internet.
+                          </p>
+                        </>
+                      )}
+                      {uploadStatus === 'save_error' && !isUploadingPhoto && (
+                        <>
+                          <p style={{ color: '#d97706', fontSize: '13px', fontWeight: '800', margin: '0 0 2px' }}>
+                            ⚠️ Photo envoyée mais sauvegarde de la liste échouée
+                          </p>
+                          <p style={{ color: '#92400e', fontSize: '11px', margin: 0 }}>
+                            Clique sur le bouton "💾 Sauvegarder tout" en bas pour forcer la mise à jour.
                           </p>
                         </>
                       )}
@@ -675,6 +717,64 @@ export default function SecretAdminModal({
                       )}
                     </motion.div>
                   )}
+
+                  {/* Outil de Diagnostic Cloud */}
+                  <div style={{
+                    marginBottom: '16px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    background: '#f8fafc',
+                    border: '1px dashed #cbd5e1'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
+                        📡 État de la synchronisation Supabase
+                      </span>
+                      <button
+                        onClick={handleDiagnose}
+                        disabled={isDiagnosing}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          background: '#fff',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          color: '#334155',
+                          cursor: isDiagnosing ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {isDiagnosing ? '⏳ Analyse...' : '🔍 Vérifier le Cloud'}
+                      </button>
+                    </div>
+
+                    {diagStatus && (
+                      <div style={{ marginTop: '10px', fontSize: '11px', color: '#334155' }}>
+                        {diagStatus.error ? (
+                          <div style={{ padding: '8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#dc2626' }}>
+                            ❌ Erreur Supabase : {diagStatus.error}
+                          </div>
+                        ) : (
+                          <div style={{ padding: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>📷 Photos dans le Cloud :</span>
+                              <strong>{diagStatus.httpsPhotos} / {diagStatus.totalPhotos}</strong>
+                            </div>
+                            {diagStatus.base64Photos > 0 && (
+                              <div style={{ color: '#d97706', marginTop: '4px' }}>
+                                ⚠️ <strong>{diagStatus.base64Photos} photo(s)</strong> sont au format local (base64) et ne se synchronisent pas entre appareils. Supprime-les et réimporte-les pour qu'elles aillent dans Supabase Storage.
+                              </div>
+                            )}
+                            {diagStatus.lastUpdate && (
+                              <div style={{ color: '#64748b', fontSize: '10px', marginTop: '2px' }}>
+                                🕒 Dernière synchro : {new Date(diagStatus.lastUpdate).toLocaleString('fr-FR')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
 
 
