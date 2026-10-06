@@ -1,58 +1,46 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { playSFXBirthdayBlow, playSFXChapterTransition } from '../lib/sfx';
 
-// Bougie SVG animée
-function Candle({ id, isLit, onBlow }) {
+// Composant Bougie mignonne avec flamme vacillante
+function SweetCandle({ id, isLit }) {
   return (
-    <motion.div
-      style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        cursor: isLit ? 'pointer' : 'default',
-        userSelect: 'none'
-      }}
-      whileHover={isLit ? { y: -3 } : {}}
-      onClick={isLit ? onBlow : undefined}
-      title={isLit ? 'Clique ou souffle ici !' : 'Soufflée !'}
-    >
-      {/* Flamme */}
-      <AnimatePresence>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', userSelect: 'none' }}>
+      {/* Flamme ou fumée */}
+      <AnimatePresence mode="wait">
         {isLit ? (
           <motion.div
             key={`flame-${id}`}
-            initial={{ opacity: 0, scaleY: 0 }}
+            initial={{ scale: 0 }}
             animate={{ 
-              opacity: 1, 
-              scaleY: [1, 1.15, 0.9, 1.2, 1],
-              scaleX: [1, 0.85, 1.1, 0.9, 1]
+              scale: [1, 1.2, 0.95, 1.15, 1],
+              rotate: [-2, 3, -3, 2, -2]
             }}
-            exit={{ opacity: 0, scaleY: 0, transition: { duration: 0.3 } }}
-            transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+            exit={{ scale: 0, opacity: 0, transition: { duration: 0.25 } }}
+            transition={{ duration: 0.7, repeat: Infinity, ease: 'easeInOut' }}
             style={{ 
-              width: '10px', 
-              height: '18px', 
-              background: 'radial-gradient(ellipse at 50% 80%, #fff176 0%, #fbbf24 40%, #f97316 80%, #ef4444 100%)',
+              width: '12px', 
+              height: '20px', 
+              background: 'radial-gradient(ellipse at 50% 80%, #fff59d 0%, #fbc02d 40%, #f57c00 75%, #d32f2f 100%)',
               borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
-              marginBottom: '2px',
-              boxShadow: '0 0 8px 3px rgba(251, 191, 36, 0.5)',
+              marginBottom: '3px',
+              boxShadow: '0 0 10px 4px rgba(251, 191, 36, 0.65)',
               transformOrigin: 'bottom center'
             }}
           />
         ) : (
           <motion.div
             key={`smoke-${id}`}
-            initial={{ opacity: 0.7, y: 0, scaleX: 1 }}
-            animate={{ opacity: 0, y: -20, scaleX: [1, 1.5, 0.5, 1.2] }}
+            initial={{ opacity: 0.8, y: 0, scale: 0.6 }}
+            animate={{ opacity: 0, y: -24, scale: 1.4 }}
             transition={{ duration: 1.2, ease: 'easeOut' }}
             style={{
-              width: '3px',
-              height: '20px',
-              background: 'linear-gradient(transparent, rgba(150,150,150,0.5))',
+              width: '4px',
+              height: '18px',
+              background: 'linear-gradient(transparent, rgba(160,160,160,0.6))',
               borderRadius: '9999px',
-              marginBottom: '2px',
+              marginBottom: '3px',
               transformOrigin: 'bottom center'
             }}
           />
@@ -62,51 +50,49 @@ function Candle({ id, isLit, onBlow }) {
       {/* Corps de la bougie */}
       <div style={{ 
         width: '12px', 
-        height: '38px', 
-        background: `linear-gradient(135deg, #fde68a, #fbbf24)`,
-        borderRadius: '3px 3px 4px 4px',
-        boxShadow: '1px 0 3px rgba(0,0,0,0.1)',
+        height: '36px', 
+        background: 'linear-gradient(135deg, #fce7f3 0%, #f472b6 60%, #ec4899 100%)',
+        borderRadius: '4px 4px 5px 5px',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
         position: 'relative',
         overflow: 'hidden'
       }}>
-        {/* Stries sur la bougie */}
-        {[10, 20, 30].map(y => (
+        {/* Rayures festives */}
+        {[8, 18, 28].map(y => (
           <div key={y} style={{
             position: 'absolute',
             left: 0, right: 0,
             top: `${y}px`,
-            height: '1px',
-            background: 'rgba(255,255,255,0.35)'
+            height: '2px',
+            background: 'rgba(255,255,255,0.6)'
           }} />
         ))}
         {/* Mèche */}
         <div style={{
           position: 'absolute',
-          top: '-3px',
+          top: '-4px',
           left: '50%',
           transform: 'translateX(-50%)',
           width: '2px',
-          height: '6px',
-          background: '#1f2937',
+          height: '5px',
+          background: '#374151',
           borderRadius: '1px'
         }} />
       </div>
-    </motion.div>
+    </div>
   );
 }
 
-const CANDLE_COUNT = 6;
-
 export default function ChapterFinale({ onRestart }) {
-  const [candlesLit, setCandlesLit] = useState(Array(CANDLE_COUNT).fill(true));
-  const [allBlown, setAllBlown] = useState(false);
-  const [blowPhase, setBlowPhase] = useState('candles'); // 'candles' | 'fireworks'
-  const [showMessage, setShowMessage] = useState(false);
+  const [candlesLit, setCandlesLit] = useState(true);
+  const [isBlowing, setIsBlowing] = useState(false);
+  const [hasBlown, setHasBlown] = useState(false);
 
+  // Grand feu d'artifice festif
   const triggerGrandFireworks = () => {
-    const duration = 12 * 1000;
+    const duration = 7 * 1000;
     const animationEnd = Date.now() + duration;
-    const defaults = { startVelocity: 30, spread: 360, ticks: 70, zIndex: 2000 };
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 2000 };
 
     function randomInRange(min, max) {
       return Math.random() * (max - min) + min;
@@ -116,7 +102,7 @@ export default function ChapterFinale({ onRestart }) {
       const timeLeft = animationEnd - Date.now();
       if (timeLeft <= 0) return clearInterval(interval);
 
-      const particleCount = 60 * (timeLeft / duration);
+      const particleCount = 50 * (timeLeft / duration);
       confetti({
         ...defaults,
         particleCount,
@@ -129,61 +115,51 @@ export default function ChapterFinale({ onRestart }) {
         origin: { x: randomInRange(0.6, 0.9), y: Math.random() - 0.2 },
         colors: ['#38bdf8', '#fbbf24', '#f43f5e', '#a855f7', '#34d399']
       });
-    }, 350);
+    }, 320);
   };
 
-  // Lancer les feux d'artifice automatiquement à l'arrivée sur la finale
+  // Son et petits confettis d'arrivée
   useEffect(() => {
-    triggerGrandFireworks();
     playSFXChapterTransition();
+    confetti({
+      particleCount: 70,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#f43f5e', '#ec4899', '#fbbf24']
+    });
   }, []);
 
-  const blowCandle = (idx) => {
-    const updated = [...candlesLit];
-    updated[idx] = false;
-    setCandlesLit(updated);
+  // Action : Souffler toutes les bougies et faire un vœu d'un coup
+  const handleBlowWishes = () => {
+    if (isBlowing || !candlesLit) return;
+    setIsBlowing(true);
 
-    // Dernier soufflage
-    if (updated.every(lit => !lit)) {
-      setAllBlown(true);
-      playSFXBirthdayBlow();
+    // Son de souffle doux
+    playSFXBirthdayBlow();
 
-      // Confetti explosion massive
+    // Extinction douce des bougies
+    setTimeout(() => {
+      setCandlesLit(false);
+      setHasBlown(true);
+      setIsBlowing(false);
+
+      // Grande explosion de confettis
       confetti({
-        particleCount: 200,
-        spread: 120,
+        particleCount: 160,
+        spread: 100,
         origin: { y: 0.5 },
         colors: ['#f43f5e', '#fbbf24', '#a855f7', '#34d399', '#38bdf8', '#ffffff']
       });
-      setTimeout(() => confetti({
-        particleCount: 150,
-        spread: 160,
-        origin: { x: 0.3, y: 0.4 },
-        colors: ['#fbbf24', '#f43f5e', '#ffffff']
-      }), 300);
-      setTimeout(() => confetti({
-        particleCount: 150,
-        spread: 160,
-        origin: { x: 0.7, y: 0.4 },
-        colors: ['#a855f7', '#38bdf8', '#34d399']
-      }), 600);
 
-      // Afficher le message magique
-      setTimeout(() => {
-        setBlowPhase('fireworks');
-        setShowMessage(true);
-        triggerGrandFireworks();
-      }, 1200);
-    }
+      // Lancer la pluie de feux d'artifice
+      setTimeout(triggerGrandFireworks, 400);
+    }, 450);
   };
 
-  const blowAllCandles = () => {
-    // Animation séquentielle d'extinction des bougies
-    candlesLit.forEach((lit, idx) => {
-      if (lit) {
-        setTimeout(() => blowCandle(idx), idx * 180);
-      }
-    });
+  // Rallumer les bougies pour recommencer le vœu
+  const handleRelight = () => {
+    setCandlesLit(true);
+    setHasBlown(false);
   };
 
   return (
@@ -195,154 +171,201 @@ export default function ChapterFinale({ onRestart }) {
     >
       <motion.div 
         className="chapter-badge"
-        animate={{ scale: [1, 1.2, 1] }}
-        transition={{ duration: 2, repeat: Infinity }}
+        animate={{ scale: [1, 1.18, 1] }}
+        transition={{ duration: 2.2, repeat: Infinity }}
       >
-        🎆
+        🎂
       </motion.div>
 
       <h1 className="finale-title">
-        Bonne fête, mon amour !
+        Joyeux Anniversaire,<br />Mon Amour !
       </h1>
 
       <p className="finale-sub">
-        Tu mérites toute la magie du monde. Aujourd'hui et chaque jour.
+        Aujourd'hui, tous les projecteurs de l'univers sont braqués sur toi.
       </p>
 
-      {/* Gâteau avec bougies interactives */}
-      <AnimatePresence>
-        {blowPhase === 'candles' && (
-          <motion.div
-            key="cake-section"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8, y: -30 }}
-            transition={{ duration: 0.5 }}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center',
-              marginBottom: '24px'
-            }}
-          >
-            {/* Rangée de bougies au-dessus du gâteau */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '16px', 
-              alignItems: 'flex-end',
-              marginBottom: '8px',
-              padding: '8px 16px'
-            }}>
-              {candlesLit.map((isLit, idx) => (
-                <Candle 
-                  key={idx} 
-                  id={idx}
-                  isLit={isLit} 
-                  onBlow={() => blowCandle(idx)} 
-                />
-              ))}
-            </div>
+      {/* Carte du Gâteau Magique */}
+      <div style={{
+        width: '100%',
+        maxWidth: '420px',
+        background: 'rgba(255, 255, 255, 0.96)',
+        backdropFilter: 'blur(20px)',
+        borderRadius: '24px',
+        padding: '28px 20px',
+        boxShadow: '0 15px 40px rgba(225, 29, 72, 0.12), 0 4px 12px rgba(0,0,0,0.04)',
+        border: '1.5px solid #fce7f3',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        margin: '10px 0 24px',
+        position: 'relative'
+      }}>
 
-            {/* Gâteau SVG simplifié */}
-            <div style={{ fontSize: '80px', lineHeight: 1, userSelect: 'none', filter: 'drop-shadow(0 8px 18px rgba(0,0,0,0.15))' }}>
-              🎂
-            </div>
+        {/* Bougies au-dessus du gâteau */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '14px', 
+          alignItems: 'flex-end',
+          marginBottom: '6px',
+          padding: '4px 10px'
+        }}>
+          {[0, 1, 2, 3, 4].map(idx => (
+            <SweetCandle key={idx} id={idx} isLit={candlesLit} />
+          ))}
+        </div>
 
-            {/* Instruction */}
-            <motion.p
-              animate={{ opacity: [0.7, 1, 0.7] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              style={{ 
-                fontFamily: 'var(--font-serif)', 
-                fontStyle: 'italic', 
-                fontSize: '17px', 
-                color: 'var(--rose-700)',
-                marginTop: '14px',
-                textAlign: 'center'
-              }}
+        {/* Le Gâteau d'anniversaire */}
+        <motion.div 
+          animate={candlesLit ? { y: [0, -3, 0] } : {}}
+          transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ fontSize: '84px', lineHeight: 1, userSelect: 'none', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.12))' }}
+        >
+          🎂
+        </motion.div>
+
+        {/* PHASE 1 : Avant le souffle -> Invitation poétique au vœu */}
+        <AnimatePresence mode="wait">
+          {!hasBlown ? (
+            <motion.div 
+              key="prompt-wish"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              style={{ width: '100%', textAlign: 'center', marginTop: '16px' }}
             >
-              {!allBlown 
-                ? `Clique sur chaque bougie pour les souffler ! (${candlesLit.filter(Boolean).length} restante${candlesLit.filter(Boolean).length > 1 ? 's' : ''} 🕯️)`
-                : "✨ Vœux exaucés ! Que ta magie opère... ✨"
-              }
-            </motion.p>
+              <p style={{
+                fontFamily: 'var(--font-serif)',
+                fontStyle: 'italic',
+                fontSize: '17px',
+                color: 'var(--rose-700)',
+                margin: '0 0 16px',
+                lineHeight: 1.4
+              }}>
+                Ferme les yeux très fort, et fais ton plus beau vœu pour cette nouvelle année... 🤫✨
+              </p>
 
-            {/* Bouton pour tout souffler d'un coup */}
-            {!allBlown && candlesLit.some(Boolean) && (
+              {/* Le bouton magique unique : clair, mignon et irrésistible */}
               <motion.button
-                onClick={blowAllCandles}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                onClick={handleBlowWishes}
+                disabled={isBlowing}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.94 }}
+                animate={{
+                  boxShadow: [
+                    '0 6px 20px rgba(244, 63, 94, 0.35)',
+                    '0 8px 30px rgba(244, 63, 94, 0.6)',
+                    '0 6px 20px rgba(244, 63, 94, 0.35)'
+                  ]
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
                 style={{
-                  marginTop: '14px',
-                  padding: '10px 22px',
-                  background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
-                  color: '#fff',
+                  width: '100%',
+                  padding: '16px 20px',
+                  background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 50%, #be123c 100%)',
+                  color: '#ffffff',
                   border: 'none',
-                  borderRadius: '9999px',
+                  borderRadius: '16px',
+                  fontSize: '15px',
                   fontWeight: '800',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  boxShadow: '0 6px 20px rgba(239, 68, 68, 0.35)'
+                  cursor: isBlowing ? 'wait' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
                 }}
               >
-                💨 Souffler toutes les bougies !
+                <span>💨</span>
+                <span>{isBlowing ? "Tu souffles fort..." : "Souffler mes bougies & faire mon vœu ✨"}</span>
               </motion.button>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Message après avoir soufflé */}
-      <AnimatePresence>
-        {showMessage && (
-          <motion.div
-            key="after-blow"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            style={{ textAlign: 'center', marginBottom: '24px' }}
-          >
-            <motion.div
-              animate={{ scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              style={{ fontSize: '56px', marginBottom: '12px' }}
-            >
-              🎊
             </motion.div>
-            <p style={{
-              fontFamily: 'var(--font-hand)',
-              fontSize: '26px',
-              color: 'var(--crimson-title)',
-              fontWeight: '700',
-              marginBottom: '8px'
-            }}>
-              Tous tes vœux ont été exaucés !
-            </p>
-            <p style={{
-              fontFamily: 'var(--font-serif)',
-              fontStyle: 'italic',
-              color: '#6b7280',
-              fontSize: '17px'
-            }}>
-              L'univers entier t'offre tout son amour ce soir 💖
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ) : (
+            /* PHASE 2 : Après le souffle -> Vœu scellé et mot d'amour */
+            <motion.div
+              key="wish-granted"
+              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              style={{ width: '100%', textAlign: 'center', marginTop: '14px' }}
+            >
+              <div style={{
+                background: 'linear-gradient(135deg, #fff1f2 0%, #fdf2f8 100%)',
+                borderRadius: '18px',
+                padding: '18px 16px',
+                border: '1px solid #fbcfe8',
+                marginBottom: '16px'
+              }}>
+                <span style={{ fontSize: '32px', display: 'block', marginBottom: '4px' }}>✨💫✨</span>
+                <h3 style={{
+                  fontFamily: 'var(--font-hand)',
+                  fontSize: '26px',
+                  color: 'var(--crimson-title)',
+                  margin: '0 0 6px',
+                  fontWeight: '700'
+                }}>
+                  Ton vœu a été scellé dans les étoiles !
+                </h3>
+                <p style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontStyle: 'italic',
+                  fontSize: '15px',
+                  color: '#4b5563',
+                  margin: 0,
+                  lineHeight: 1.5
+                }}>
+                  Que cette nouvelle année de ta vie t'apporte tout le bonheur, la santé et l'amour que tu mérites. Je t'aime à l'infini ! 💖
+                </p>
+              </div>
 
-      {/* Bouton feux d'artifice */}
-      <motion.button 
-        className="fireworks-button"
-        onClick={triggerGrandFireworks}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.94 }}
-        animate={{ boxShadow: ['0 0 25px rgba(253, 224, 71, 0.5)', '0 0 45px rgba(253, 224, 71, 0.8)', '0 0 25px rgba(253, 224, 71, 0.5)'] }}
-        transition={{ duration: 1.8, repeat: Infinity }}
-      >
-        🎉 Lancer les feux d'artifice !
-      </motion.button>
+              {/* Bouton pour relancer les feux d'artifice */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <motion.button
+                  onClick={triggerGrandFireworks}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.96 }}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>🎉</span>
+                  <span>Relancer les feux d'artifice !</span>
+                </motion.button>
 
+                {/* Bouton pour rallumer si elle veut rejouer */}
+                <button
+                  onClick={handleRelight}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#9ca3af',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  🕯️ Rallumer les bougies pour re-faire un vœu
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Petits emojis doux */}
       <div className="finale-emojis">
         <span>💖</span>
         <span>🌸</span>
@@ -353,6 +376,7 @@ export default function ChapterFinale({ onRestart }) {
         <span>✨</span>
       </div>
 
+      {/* Indicateur de fin */}
       <div className="chapter-dots">
         <span className="p-dot"></span>
         <span className="p-dot"></span>
@@ -362,6 +386,7 @@ export default function ChapterFinale({ onRestart }) {
         <span className="p-dot active"></span>
       </div>
 
+      {/* Recommencer l'histoire */}
       {onRestart && (
         <motion.button
           onClick={onRestart}
@@ -369,25 +394,26 @@ export default function ChapterFinale({ onRestart }) {
           whileTap={{ scale: 0.95 }}
           style={{
             marginBottom: '20px',
-            background: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.25)',
-            color: '#fce7f3',
-            padding: '8px 20px',
+            background: 'rgba(255, 255, 255, 0.85)',
+            border: '1px solid #fbcfe8',
+            color: 'var(--rose-700)',
+            padding: '9px 22px',
             borderRadius: '9999px',
             fontSize: '13px',
-            fontWeight: '600',
+            fontWeight: '700',
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px'
+            gap: '6px',
+            boxShadow: '0 4px 12px rgba(225, 29, 72, 0.08)'
           }}
         >
-          🔄 Recommencer l'histoire
+          🔄 Revivre toute notre histoire
         </motion.button>
       )}
 
       <footer className="site-footer">
-        Fait avec <span style={{ color: '#f43f5e' }}>❤️</span> rien que pour toi
+        Fait avec tout mon amour <span style={{ color: '#f43f5e' }}>❤️</span> rien que pour toi
       </footer>
     </motion.div>
   );
