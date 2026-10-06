@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ChapterPhotos({ photos = [], onNext }) {
-  const [mode, setMode] = useState('grid'); // 'grid' | 'slideshow'
+  const [mode, setMode] = useState('slideshow'); // 'slideshow' (par défaut) | 'grid'
   const [currentSlide, setCurrentSlide] = useState(0);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [direction, setDirection] = useState(1);
@@ -50,35 +50,39 @@ export default function ChapterPhotos({ photos = [], onNext }) {
 
       {photos.length === 0 ? (
         <div className="photo-empty">
-          Tes photos apparaîtront ici — ajoute-en facilement dans le panneau secret ✏️
+          Tes photos apparaîtront ici — ajoute-en facilement dans le panneau secret 🌸
         </div>
       ) : (
         <>
-          {/* Sélecteur de mode : Grille / Diaporama */}
+          {/* Sélecteur de mode : Diaporama en premier, puis Galerie */}
           <div style={{ 
             display: 'flex', 
-            gap: '8px', 
+            gap: '10px', 
             justifyContent: 'center', 
             marginBottom: '22px' 
           }}>
-            {['grid', 'slideshow'].map(m => (
+            {[
+              { id: 'slideshow', label: '▶ Diaporama' },
+              { id: 'grid', label: '⊞ Galerie' }
+            ].map(tab => (
               <button
-                key={m}
-                onClick={() => { setMode(m); setCurrentSlide(0); }}
+                key={tab.id}
+                onClick={() => { setMode(tab.id); setCurrentSlide(0); }}
                 style={{
-                  padding: '8px 20px',
+                  padding: '9px 22px',
                   borderRadius: '9999px',
                   border: '1.5px solid',
-                  borderColor: mode === m ? 'var(--rose-500)' : '#fce7f3',
-                  background: mode === m ? 'var(--rose-500)' : '#fff',
-                  color: mode === m ? '#fff' : 'var(--rose-700)',
-                  fontWeight: '700',
+                  borderColor: mode === tab.id ? 'var(--rose-600)' : '#fce7f3',
+                  background: mode === tab.id ? 'var(--rose-600)' : '#ffffff',
+                  color: mode === tab.id ? '#ffffff' : 'var(--rose-700)',
+                  fontWeight: '800',
                   fontSize: '13px',
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  boxShadow: mode === tab.id ? '0 4px 15px rgba(225, 29, 72, 0.25)' : 'none',
+                  transition: 'all 0.25s ease'
                 }}
               >
-                {m === 'grid' ? '⊞ Galerie' : '▶ Diaporama'}
+                {tab.label}
               </button>
             ))}
           </div>
