@@ -1,26 +1,26 @@
 -- ============================================================
--- SCRIPT SQL D'INITIALISATION POUR SUPABASE
--- Copiez et collez ce script dans l'éditeur SQL de Supabase (SQL Editor)
+-- SCRIPT SQL D'INITIALISATION POUR SUPABASE (RÉ-EXÉCUTABLE SANS ERREUR)
 -- ============================================================
 
--- 1. Création de la table de configuration du site d'anniversaire
+-- 1. Table de configuration
 CREATE TABLE IF NOT EXISTS public.birthday_config (
   id TEXT PRIMARY KEY,
   config JSONB NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Activation de la sécurité au niveau des lignes (RLS)
+-- 2. Activation RLS
 ALTER TABLE public.birthday_config ENABLE ROW LEVEL SECURITY;
 
--- 3. Politique : Autoriser tout le monde à lire (votre copine peut voir la surprise)
+-- 3. Politiques pour la table (supprimées si existantes puis recréées)
+DROP POLICY IF EXISTS "Lecture publique autorisée" ON public.birthday_config;
 CREATE POLICY "Lecture publique autorisée"
 ON public.birthday_config
 FOR SELECT
 TO public
 USING (true);
 
--- 4. Politique : Autoriser la mise à jour / insertion (pour vos modifications d'administration)
+DROP POLICY IF EXISTS "Écriture publique autorisée" ON public.birthday_config;
 CREATE POLICY "Écriture publique autorisée"
 ON public.birthday_config
 FOR ALL
@@ -28,18 +28,19 @@ TO public
 USING (true)
 WITH CHECK (true);
 
--- 5. Création du bucket de stockage pour les photos (si ce n'est pas déjà fait)
+-- 4. Création du bucket de stockage (pour photos & musiques)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('birthday-photos', 'birthday-photos', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
--- 6. Politique de stockage : Autoriser l'accès public en lecture aux photos
+-- 5. Politiques pour le stockage
+DROP POLICY IF EXISTS "Accès public aux photos" ON storage.objects;
 CREATE POLICY "Accès public aux photos"
 ON storage.objects FOR SELECT
 TO public
 USING (bucket_id = 'birthday-photos');
 
--- 7. Politique de stockage : Autoriser l'envoi de photos depuis l'admin
+DROP POLICY IF EXISTS "Upload public de photos" ON storage.objects;
 CREATE POLICY "Upload public de photos"
 ON storage.objects FOR INSERT
 TO public
