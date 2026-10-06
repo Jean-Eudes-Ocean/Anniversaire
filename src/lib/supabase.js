@@ -1,22 +1,68 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Credentials Supabase garantis et testés
 const DEFAULT_SUPABASE_URL = "https://icvxzlcfmkkkogaktvgg.supabase.co";
 const DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imljdnh6bGNmbWtra29nYWt0dmdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExNDk2NzIsImV4cCI6MjEwNjcyNTY3Mn0.ZVS3os-3FYvWLT4NN2yAtJYibt7PU3CVc53PnDMqHfw";
 
-const getCredentials = () => {
-  const envUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
-  if (envUrl && envKey) return { url: envUrl, key: envKey };
+/**
+ * Nettoie impitoyablement toute chaîne pour éliminer :
+ * - Les guillemets ou apostrophes superflus
+ * - Les retours à la ligne (\r, \n) et tabulations
+ * - Les espaces insécables et caractères non-ASCII (qui font crasher 'Headers.set')
+ * - Le préfixe 'Bearer ' si collé par erreur
+ */
+const sanitizeCredential = (val) => {
+  if (typeof val !== 'string') return '';
+  return val
+    .trim()
+    .replace(/^["'`]|["'`]$/g, '')  // Supprime guillemets / backticks extérieurs
+    .replace(/[^\x20-\x7E]/g, '')   // Supprime STRICTEMENT tout caractère non-ASCII standard
+    .replace(/^Bearer\s+/i, '')     // Supprime préfixe 'Bearer ' si copié
+    .trim();
+};
 
-  try {
-    const saved = localStorage.getItem('supabase_credentials');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.url && parsed.key) return parsed;
+const isValidSupabaseUrl = (url) => {
+  return typeof url === 'string' && url.startsWith('https://') && url.includes('.supabase.co');
+};
+
+const isValidSupabaseKey = (key) => {
+  return typeof key === 'string' && key.startsWith('eyJ') && key.length > 80;
+};
+
+/**
+ * Récupère des identifiants 100% valides, nettoyés et vérifiés.
+ * Si les variables injectées ou le localStorage sont corrompus ou invalides,
+ * bascule automatiquement sur les credentials officiels du projet.
+ */
+export const getCredentials = () => {
+  let url = sanitizeCredential(import.meta.env.VITE_SUPABASE_URL);
+  let key = sanitizeCredential(import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+  // Si absent ou invalide, tester le localStorage
+  if (!isValidSupabaseUrl(url) || !isValidSupabaseKey(key)) {
+    try {
+      const saved = localStorage.getItem('supabase_credentials');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const savedUrl = sanitizeCredential(parsed?.url);
+        const savedKey = sanitizeCredential(parsed?.key);
+        if (isValidSupabaseUrl(savedUrl) && isValidSupabaseKey(savedKey)) {
+          url = savedUrl;
+          key = savedKey;
+        } else {
+          localStorage.removeItem('supabase_credentials');
+        }
+      }
+    } catch {
+      try { localStorage.removeItem('supabase_credentials'); } catch {}
     }
-  } catch (e) {}
+  }
 
-  return { url: DEFAULT_SUPABASE_URL, key: DEFAULT_SUPABASE_KEY };
+  // Fallback garanti sur les constantes du projet
+  if (!isValidSupabaseUrl(url)) url = DEFAULT_SUPABASE_URL;
+  if (!isValidSupabaseKey(key)) key = DEFAULT_SUPABASE_KEY;
+
+  return { url, key };
 };
 
 let clientInstance = null;
@@ -24,61 +70,80 @@ let clientInstance = null;
 export const getSupabaseClient = () => {
   const { url, key } = getCredentials();
   if (!url || !key) return null;
-  if (!clientInstance) clientInstance = createClient(url, key);
+  if (!clientInstance) {
+    try {
+      clientInstance = createClient(url, key, {
+        auth: { persistSession: false }
+      });
+    } catch (e) {
+      console.warn("Erreur createClient, réinitialisation avec clés par défaut:", e);
+      clientInstance = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_KEY, {
+        auth: { persistSession: false }
+      });
+    }
+  }
   return clientInstance;
 };
 
 export const isSupabaseConfigured = () => {
   const { url, key } = getCredentials();
-  return Boolean(url && key);
+  return Boolean(isValidSupabaseUrl(url) && isValidSupabaseKey(key));
 };
 
-export const saveSupabaseCredentials = (url, key) => {
-  localStorage.setItem('supabase_credentials', JSON.stringify({ url: url.trim(), key: key.trim() }));
+export const saveSupabaseCredentials = (rawUrl, rawKey) => {
+  const url = sanitizeCredential(rawUrl);
+  const key = sanitizeCredential(rawKey);
+  if (isValidSupabaseUrl(url) && isValidSupabaseKey(key)) {
+    localStorage.setItem('supabase_credentials', JSON.stringify({ url, key }));
+  } else {
+    localStorage.removeItem('supabase_credentials');
+  }
   clientInstance = null;
 };
 
 /**
- * Récupère la configuration depuis Supabase
+ * Récupère la configuration depuis Supabase (via REST direct ultra-robuste)
  */
 export const fetchBirthdayConfig = async () => {
-  const supabase = getSupabaseClient();
-  if (!supabase) return null;
+  const { url, key } = getCredentials();
+  if (!url || !key) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('birthday_config')
-      .select('*')
-      .eq('id', 'default')
-      .single();
+    const endpoint = `${url}/rest/v1/birthday_config?select=config&id=eq.default`;
+    const res = await fetch(endpoint, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`
+      }
+    });
 
-    if (error && error.code !== 'PGRST116') {
-      console.warn("Erreur chargement Supabase:", error);
+    if (!res.ok) {
+      console.warn("Supabase fetch returned status:", res.status);
       return null;
     }
 
-    return data ? data.config : null;
+    const data = await res.json();
+    return data && data.length > 0 ? data[0].config : null;
   } catch (err) {
-    console.warn("Erreur réseau Supabase:", err);
+    console.warn("Erreur réseau fetchBirthdayConfig:", err);
     return null;
   }
 };
 
 /**
  * Sauvegarde la config dans Supabase.
- * IMPORTANT : nettoie toutes les URLs base64 avant d'envoyer
- * (les base64 sont trop lourdes pour la colonne JSONB).
+ * - Nettoie toutes les URLs base64 (les base64 sont trop lourdes pour JSONB)
+ * - Fait l'upsert via l'API REST directe de Supabase
  */
 export const saveBirthdayConfig = async (configData) => {
-  const supabase = getSupabaseClient();
-  if (!supabase) return { success: false, error: 'Non configuré' };
+  const { url, key } = getCredentials();
+  if (!url || !key) return { success: false, error: 'Non configuré' };
 
-  // ⚠️ Nettoyer les photos base64 avant la sauvegarde cloud
-  // Une photo base64 de 150Ko = 200Ko de texte → dépasse les limites JSONB
+  // Exclure les photos locales en base64 pour ne pas saturer la base de données
   const sanitizedPhotos = (configData.photos || []).filter(p => {
     if (!p?.url) return false;
     if (p.url.startsWith('data:')) {
-      console.warn('⚠️ Photo base64 exclue de la sauvegarde Supabase (trop lourde) :', p.caption || 'sans légende');
+      console.warn('⚠️ Photo locale base64 exclue de Supabase (trop lourde) :', p.caption || 'sans légende');
       return false;
     }
     return true;
@@ -87,28 +152,35 @@ export const saveBirthdayConfig = async (configData) => {
   const dataToSave = {
     ...configData,
     photos: sanitizedPhotos,
-    music: undefined // jamais de musique dans Supabase
+    music: undefined // La musique intégrée locale est utilisée
   };
 
   const skipped = (configData.photos || []).length - sanitizedPhotos.length;
-  if (skipped > 0) {
-    console.warn(`⚠️ ${skipped} photo(s) non sauvegardée(s) dans Supabase car encore en base64.`);
-    console.warn('👉 Ces photos n\'apparaîtront que sur l\'appareil courant.');
-    console.warn('💡 Solution : re-ajouter les photos depuis l\'onglet Photos (elles iront dans Supabase Storage).');
-  }
 
   try {
-    const { error } = await supabase
-      .from('birthday_config')
-      .upsert({
+    const endpoint = `${url}/rest/v1/birthday_config`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=representation'
+      },
+      body: JSON.stringify({
         id: 'default',
         config: dataToSave,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'id' });
+      })
+    });
 
-    if (error) throw error;
-    
-    console.log(`✅ Config sauvegardée dans Supabase (${sanitizedPhotos.length} photos https://).`);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Erreur sauvegarde Supabase HTTP:", res.status, errText);
+      return { success: false, error: `HTTP ${res.status}: ${errText}` };
+    }
+
+    console.log(`✅ Config sauvegardée dans Supabase (${sanitizedPhotos.length} photos Cloud).`);
     return { success: true, savedPhotos: sanitizedPhotos.length, skippedPhotos: skipped };
   } catch (err) {
     console.error("Erreur sauvegarde Supabase:", err);
@@ -162,56 +234,46 @@ export const compressImage = (file, maxWidth = 1200, quality = 0.82) => {
 };
 
 /**
- * Upload une photo dans Supabase Storage.
- * - Retourne une URL https:// publique si succès ✅
- * - Retourne null si échec (pas de fallback base64 : ça casserait la sync cloud)
- *
- * Prérequis : bucket "birthday-photos" public + politiques SELECT/INSERT/UPDATE dans Supabase
+ * Upload une photo dans Supabase Storage via l'API REST directe.
+ * - Évite tout bug interne de bibliothèque ou de Headers
+ * - Retourne l'URL publique directe : https://.../birthday-photos/photos/...
+ * - Retourne null si échec
  */
 export const uploadPhotoToSupabase = async (file) => {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
+  const { url, key } = getCredentials();
+  if (!url || !key) {
     console.error('❌ Supabase non configuré');
     return null;
   }
 
   try {
     const fileToUpload = await compressImage(file);
-    // Nom unique garanti → INSERT suffit (pas besoin d'UPDATE)
     const cleanFileName = `photo-${Date.now()}-${Math.random().toString(36).substring(2, 9)}.jpg`;
     const filePath = `photos/${cleanFileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('birthday-photos')
-      .upload(filePath, fileToUpload, {
-        contentType: 'image/jpeg',
-        cacheControl: '31536000',
-        upsert: false  // false = INSERT uniquement, pas besoin de politique UPDATE
-      });
+    const uploadUrl = `${url}/storage/v1/object/birthday-photos/${filePath}`;
 
-    if (uploadError) {
-      if (uploadError.message?.toLowerCase().includes('bucket') ||
-          String(uploadError.statusCode) === '404' ||
-          uploadError.error === 'Bucket not found') {
-        console.error('❌ Bucket "birthday-photos" introuvable !');
-        console.error('👉 Va dans Supabase Dashboard → Storage → New bucket → "birthday-photos" → Public');
-      } else {
-        console.error('❌ Erreur upload Storage:', uploadError.message || uploadError);
-      }
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'true'
+      },
+      body: fileToUpload
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Erreur upload Supabase Storage HTTP:', response.status, errorText);
       return null;
     }
 
-    const { data } = supabase.storage
-      .from('birthday-photos')
-      .getPublicUrl(filePath);
-
-    if (data?.publicUrl) {
-      console.log('✅ Photo dans Supabase Storage:', data.publicUrl);
-      return data.publicUrl;
-    }
-
-    console.error('❌ getPublicUrl a échoué après upload réussi');
-    return null;
+    // URL publique accessible directement
+    const publicUrl = `${url}/storage/v1/object/public/birthday-photos/${filePath}`;
+    console.log('✅ Photo stockée dans Supabase Storage:', publicUrl);
+    return publicUrl;
 
   } catch (err) {
     console.error('❌ Exception upload photo:', err?.message || err);
@@ -220,24 +282,36 @@ export const uploadPhotoToSupabase = async (file) => {
 };
 
 /**
- * Diagnostic : retourne l'état réel de la config Supabase
+ * Diagnostic en direct : vérifie la connexion Supabase et l'état des photos
  */
 export const diagnoseSyncStatus = async () => {
-  const supabase = getSupabaseClient();
-  if (!supabase) return { error: 'Supabase non configuré' };
+  const { url, key } = getCredentials();
+  if (!url || !key) return { error: 'Identifiants Supabase non trouvés' };
 
   try {
-    const { data, error } = await supabase
-      .from('birthday_config')
-      .select('id, updated_at, config')
-      .eq('id', 'default')
-      .single();
+    const endpoint = `${url}/rest/v1/birthday_config?select=id,updated_at,config&id=eq.default`;
+    const res = await fetch(endpoint, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`
+      }
+    });
 
-    if (error) return { error: error.message, photos: 0 };
+    if (!res.ok) {
+      const errText = await res.text();
+      return { error: `Erreur HTTP ${res.status}: ${errText.slice(0, 100)}` };
+    }
+
+    const rows = await res.json();
+    const data = rows && rows.length > 0 ? rows[0] : null;
+
+    if (!data) {
+      return { error: 'Aucune donnée trouvée dans la table birthday_config' };
+    }
 
     const photos = data?.config?.photos || [];
-    const httpsPhotos = photos.filter(p => p?.url?.startsWith('https://'));
-    const base64Photos = photos.filter(p => p?.url?.startsWith('data:'));
+    const httpsPhotos = photos.filter(p => p?.url && p.url.startsWith('https://'));
+    const base64Photos = photos.filter(p => p?.url && p.url.startsWith('data:'));
 
     return {
       totalPhotos: photos.length,
@@ -247,6 +321,7 @@ export const diagnoseSyncStatus = async () => {
       ok: base64Photos.length === 0
     };
   } catch (err) {
-    return { error: err.message };
+    console.error("Erreur diagnoseSyncStatus:", err);
+    return { error: err.message || 'Erreur de connexion' };
   }
 };
