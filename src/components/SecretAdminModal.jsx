@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   uploadPhotoToSupabase,
-  diagnoseSyncStatus
+  diagnoseSyncStatus,
+  deletePhotoFromSupabase
 } from '../lib/supabase';
 
 export default function SecretAdminModal({ 
@@ -168,6 +169,40 @@ export default function SecretAdminModal({
       setDiagStatus({ error: err.message });
     } finally {
       setIsDiagnosing(false);
+    }
+  };
+
+  // Suppression d'une photo : retire l'image de Supabase Storage et met à jour la base de données
+  const handleDeletePhoto = async (indexToDelete) => {
+    const photoToDelete = formData.photos?.[indexToDelete];
+    if (!photoToDelete) return;
+
+    const updatedPhotos = (formData.photos || []).filter((_, i) => i !== indexToDelete);
+    const updatedData = {
+      ...formData,
+      photos: updatedPhotos
+    };
+
+    // 1. Mise à jour visuelle instantanée
+    setFormData(updatedData);
+
+    // 2. Suppression physique du fichier dans Supabase Storage (en arrière-plan)
+    if (photoToDelete.url) {
+      deletePhotoFromSupabase(photoToDelete.url).catch(() => {});
+    }
+
+    // 3. Sauvegarde automatique dans la base de données Supabase
+    try {
+      setIsSaving(true);
+      await onSave(updatedData);
+      setUploadStatus('deleted');
+      setTimeout(() => setUploadStatus(''), 4000);
+    } catch (err) {
+      console.warn("Erreur auto-save après suppression photo:", err);
+      setUploadStatus('save_error');
+      setTimeout(() => setUploadStatus(''), 4000);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -661,13 +696,13 @@ export default function SecretAdminModal({
                         borderRadius: '12px',
                         textAlign: 'center',
                         marginBottom: '14px',
-                        background: uploadStatus === 'done'
+                        background: (uploadStatus === 'done' || uploadStatus === 'deleted')
                           ? '#f0fdf4'
                           : (uploadStatus === 'error' || uploadStatus === 'storage_error' || uploadStatus === 'save_error')
                           ? '#fef2f2'
                           : '#fdf2f8',
                         border: `1px solid ${
-                          uploadStatus === 'done' 
+                          (uploadStatus === 'done' || uploadStatus === 'deleted')
                             ? '#bbf7d0' 
                             : (uploadStatus === 'error' || uploadStatus === 'storage_error' || uploadStatus === 'save_error')
                             ? '#fecaca' 
@@ -677,7 +712,7 @@ export default function SecretAdminModal({
                     >
                       {(isUploadingPhoto || uploadStatus === 'uploading') && (
                         <p style={{ color: 'var(--rose-600)', fontSize: '13px', fontWeight: '700', margin: 0 }}>
-                          ⏳ Upload et synchronisation automatique en cours...
+                          ⏳ Synchronisation automatique en cours...
                         </p>
                       )}
                       {uploadStatus === 'done' && !isUploadingPhoto && (
@@ -689,6 +724,11 @@ export default function SecretAdminModal({
                             Elles sont désormais visibles sur tous tes appareils (PC, téléphone) 📱💻
                           </p>
                         </>
+                      )}
+                      {uploadStatus === 'deleted' && !isUploadingPhoto && (
+                        <p style={{ color: '#16a34a', fontSize: '13px', fontWeight: '800', margin: 0 }}>
+                          🗑️ Photo supprimée de Supabase et synchronisée !
+                        </p>
                       )}
                       {uploadStatus === 'storage_error' && !isUploadingPhoto && (
                         <>
@@ -800,8 +840,8 @@ export default function SecretAdminModal({
                             alignItems: 'center',
                             justifyContent: 'center'
                           }}
-                          onClick={() => setFormData({ ...formData, photos: formData.photos.filter((_, i) => i !== idx) })}
-                          title="Supprimer la photo"
+                          onClick={() => handleDeletePhoto(idx)}
+                          title="Supprimer la photo de Supabase"
                         >
                           ✕
                         </button>

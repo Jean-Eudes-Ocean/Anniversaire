@@ -254,3 +254,32 @@ export const diagnoseSyncStatus = async () => {
     return { error: err.message || 'Erreur de connexion' };
   }
 };
+
+/**
+ * Supprime un fichier photo de Supabase Storage
+ */
+export const deletePhotoFromSupabase = async (photoUrl) => {
+  if (!photoUrl || typeof photoUrl !== 'string') return;
+  const marker = '/storage/v1/object/public/birthday-photos/';
+  if (!photoUrl.includes(marker)) return;
+
+  const filePath = photoUrl.substring(photoUrl.indexOf(marker) + marker.length);
+  if (!filePath) return;
+
+  try {
+    const deleteUrl = `${OFFICIAL_SUPABASE_URL}/storage/v1/object/birthday-photos`;
+    await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: {
+        'apikey': OFFICIAL_SUPABASE_KEY,
+        'Authorization': `Bearer ${OFFICIAL_SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ prefixes: [filePath] })
+    });
+    console.log('🗑️ Photo supprimée du Storage:', filePath);
+  } catch (err) {
+    console.warn('Erreur suppression Storage:', err);
+  }
+};
+
