@@ -98,20 +98,60 @@ export const saveBirthdayConfig = async (configData) => {
 };
 
 /**
+ * Compresse automatiquement une image côté client (max 1920px, JPEG 82%)
+ * Divise la taille d'une photo de smartphone (10 Mo -> 300 Ko) en conservant une netteté cristalline.
+ */
+export const compressImage = (file, maxWidth = 1920, quality = 0.82) => {
+  if (!file || !file.type || !file.type.startsWith('image/')) return Promise.resolve(file);
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob && blob.size < file.size) {
+            resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: 'image/jpeg' }));
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
  * Upload d'une photo dans le bucket Supabase Storage 'birthday-photos'
+ * avec compression automatique pour supporter des dizaines de photos sans aucun lag.
  */
 export const uploadPhotoToSupabase = async (file) => {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
 
   try {
-    const fileExt = file.name.split('.').pop();
+    const fileToUpload = await compressImage(file);
+    const fileExt = fileToUpload.name.split('.').pop() || 'jpg';
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
     const filePath = `photos/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from('birthday-photos')
-      .upload(filePath, file, { cacheControl: '3600', upsert: true });
+      .upload(filePath, fileToUpload, { cacheControl: '31536000', upsert: true });
 
     if (uploadError) throw uploadError;
 

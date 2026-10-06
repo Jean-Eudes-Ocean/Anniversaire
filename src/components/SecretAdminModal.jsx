@@ -212,6 +212,7 @@ export default function SecretAdminModal({
   };
 
   // Upload photos (fichiers locaux ou URLs)
+  // Upload photos (stockage ultra-rapide et optimisé dans Supabase Storage)
   const handlePhotoUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -227,17 +228,10 @@ export default function SecretAdminModal({
             photos: [...(prev.photos || []), { url: publicUrl, caption: file.name.replace(/\.[^/.]+$/, "") }]
           }));
         } else {
-          const reader = new FileReader();
-          reader.onload = (loadEvent) => {
-            setFormData(prev => ({
-              ...prev,
-              photos: [...(prev.photos || []), { url: loadEvent.target.result, caption: file.name.replace(/\.[^/.]+$/, "") }]
-            }));
-          };
-          reader.readAsDataURL(file);
+          alert(`La photo ${file.name} n'a pas pu être envoyée. Vérifie ta connexion internet.`);
         }
       } catch (err) {
-        console.warn("Upload photo fallback:", err);
+        console.warn("Upload photo error:", err);
       }
     }
 
