@@ -134,10 +134,14 @@ export default function SecretAdminModal({
     try {
       const result = await savePersistentAudio(file);
       if (result) {
-        const effectiveUrl = result.cloudUrl || result.blobUrl;
+        // blobUrl = pour écoute immédiate sur CET appareil uniquement
+        // cloudUrl = URL Supabase Storage permanente (fonctionnel sur tous appareils/recharges)
+        const localUrl = result.blobUrl; // blob:// = écoute locale immédiate
+        const cloudUrl = result.cloudUrl || null; // https:// ou null si bucket non configuré
         setMusicFileName(result.name);
         if (typeof onMusicChange === 'function') {
-          onMusicChange(effectiveUrl, result.name);
+          // On passe : localUrl pour lecture, name, cloudUrl pour sauvegarde Supabase
+          onMusicChange(localUrl, result.name, cloudUrl);
         }
         setMusicUploadSuccess(true);
         setTimeout(() => setMusicUploadSuccess(false), 4000);
@@ -151,14 +155,19 @@ export default function SecretAdminModal({
     }
   };
 
-  // Appliquer une URL directe de musique
+  // Appliquer une URL directe de musique (URL web publique = comme un cloudUrl)
   const handleApplyMusicUrl = () => {
     if (!musicLinkInput.trim()) return;
     const url = musicLinkInput.trim();
+    if (!url.startsWith('http')) {
+      alert("Veuillez coller une URL web valide commençant par https://");
+      return;
+    }
     const name = url.split('/').pop()?.split('?')[0] || "Musique personnalisée (Lien direct)";
     setMusicFileName(name);
     if (typeof onMusicChange === 'function') {
-      onMusicChange(url, name);
+      // L'URL web est déjà une URL cloud publique : locale = cloud = même url
+      onMusicChange(url, name, url);
     }
     setMusicUploadSuccess(true);
     setMusicLinkInput('');
@@ -175,7 +184,7 @@ export default function SecretAdminModal({
     const defaultName = "Mélodie romantique féerique (intégrée)";
     setMusicFileName(defaultName);
     if (typeof onMusicChange === 'function') {
-      onMusicChange(null, defaultName);
+      onMusicChange(null, defaultName, null); // Réinitialise aussi cloudMusicUrl
     }
   };
 
@@ -805,7 +814,8 @@ export default function SecretAdminModal({
                       🎵 Musique d'ambiance romantique
                     </p>
                     <p style={{ fontSize: '12px', color: '#6b7280', margin: 0, lineHeight: 1.5 }}>
-                      Importe ta propre chanson MP3 préférée. Elle est <strong>sauvegardée de façon permanente</strong> sur cet appareil et se rejoue automatiquement à chaque visite de ta copine !
+                      Importe ta musique MP3. Elle sera sauvegardée localement sur cet appareil.
+                      Pour qu'elle fonctionne <strong>sur le téléphone de ta copine</strong>, utilise plutôt un <strong>lien web direct</strong> (section ci-dessous) ou assure-toi que le stockage Supabase est configuré.
                     </p>
                   </div>
 
@@ -964,8 +974,11 @@ export default function SecretAdminModal({
                         textAlign: 'center' 
                       }}
                     >
-                      <p style={{ color: '#065f46', fontSize: '13px', fontWeight: '700', margin: 0 }}>
-                        ✅ Musique enregistrée avec succès ! Elle restera même après actualisation de la page.
+                      <p style={{ color: '#065f46', fontSize: '13px', fontWeight: '700', margin: '0 0 4px' }}>
+                        ✅ Musique enregistrée sur cet appareil !
+                      </p>
+                      <p style={{ color: '#047857', fontSize: '11px', margin: 0 }}>
+                        Pour qu'elle joue aussi sur le téléphone de ta copine, clique sur « Enregistrer toutes les modifications » ci-dessous. 💖
                       </p>
                     </motion.div>
                   )}
