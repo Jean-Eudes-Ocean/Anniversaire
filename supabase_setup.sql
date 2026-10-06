@@ -45,3 +45,18 @@ CREATE POLICY "Upload public de photos"
 ON storage.objects FOR INSERT
 TO public
 WITH CHECK (bucket_id = 'birthday-photos');
+
+-- Politique UPDATE (nécessaire pour upsert)
+DROP POLICY IF EXISTS "Update public de photos" ON storage.objects;
+CREATE POLICY "Update public de photos"
+ON storage.objects FOR UPDATE
+TO public
+USING (bucket_id = 'birthday-photos')
+WITH CHECK (bucket_id = 'birthday-photos');
+
+-- Politique DELETE (pour pouvoir supprimer des photos)
+DROP POLICY IF EXISTS "Delete public de photos" ON storage.objects;
+CREATE POLICY "Delete public de photos"
+ON storage.objects FOR DELETE
+TO public
+USING (bucket_id = 'birthday-photos');

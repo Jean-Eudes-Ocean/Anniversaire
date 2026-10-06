@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   uploadPhotoToSupabase 
@@ -20,6 +20,7 @@ export default function SecretAdminModal({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(''); // '' | 'uploading' | 'done' | 'error'
 
   // Photo URL input
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
@@ -27,10 +28,18 @@ export default function SecretAdminModal({
 
   const flowerTimerRef = useRef(null);
   const pinInputRef = useRef(null);
+  // Référence mutable pour le formData courant (utile dans les callbacks async)
+  const formDataRef = useRef(formData);
 
   useEffect(() => {
     setFormData(data);
+    formDataRef.current = data;
   }, [data]);
+
+  // Mise à jour de la ref à chaque changement de formData
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   // Focus automatique du champ PIN à l'ouverture
   useEffect(() => {
@@ -90,27 +99,56 @@ export default function SecretAdminModal({
     }
   };
 
-  // Upload photos (stockage ultra-rapide et optimisé dans Supabase Storage)
+  // Upload photos avec auto-sauvegarde immédiate dans Supabase
   const handlePhotoUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploadingPhoto(true);
+    setUploadStatus('uploading');
+
+    let newPhotos = [];
+    let hasError = false;
 
     for (const file of Array.from(files)) {
       try {
         const publicUrl = await uploadPhotoToSupabase(file);
         if (publicUrl) {
-          setFormData(prev => ({
-            ...prev,
-            photos: [...(prev.photos || []), { url: publicUrl, caption: file.name.replace(/\.[^/.]+$/, "") }]
-          }));
+          newPhotos.push({ url: publicUrl, caption: file.name.replace(/\.[^/.]+$/, '') });
         } else {
-          alert(`La photo ${file.name} n'a pas pu être envoyée. Vérifie ta connexion internet.`);
+          hasError = true;
+          console.warn(`Upload échoué pour : ${file.name}`);
         }
       } catch (err) {
-        console.warn("Upload photo error:", err);
+        hasError = true;
+        console.warn('Upload photo error:', err);
       }
+    }
+
+    if (newPhotos.length > 0) {
+      // Mise à jour du formData avec les nouvelles photos
+      const updatedData = {
+        ...formDataRef.current,
+        photos: [...(formDataRef.current.photos || []), ...newPhotos]
+      };
+      setFormData(updatedData);
+
+      // ✅ Auto-sauvegarde immédiate — pas besoin de cliquer "Sauvegarder"
+      try {
+        setIsSaving(true);
+        await onSave(updatedData);
+        setUploadStatus('done');
+        setTimeout(() => setUploadStatus(''), 4000);
+      } catch (err) {
+        console.warn('Auto-save error after photo upload:', err);
+        setUploadStatus('error');
+        setTimeout(() => setUploadStatus(''), 5000);
+      } finally {
+        setIsSaving(false);
+      }
+    } else if (hasError) {
+      setUploadStatus('error');
+      setTimeout(() => setUploadStatus(''), 5000);
     }
 
     setIsUploadingPhoto(false);
@@ -596,13 +634,49 @@ export default function SecretAdminModal({
                     </div>
                   </div>
 
-                  {isUploadingPhoto && (
-                    <div style={{ padding: '12px', background: '#fdf2f8', borderRadius: '10px', textAlign: 'center', marginBottom: '14px' }}>
-                      <p style={{ color: 'var(--rose-600)', fontSize: '13px', fontWeight: '700', margin: 0 }}>
-                        ⏳ Traitement et enregistrement de tes photos...
-                      </p>
-                    </div>
+
+                  {/* Statut d'upload avec feedback riche */}
+                  {(isUploadingPhoto || uploadStatus) && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        textAlign: 'center',
+                        marginBottom: '14px',
+                        background: uploadStatus === 'done'
+                          ? '#f0fdf4'
+                          : uploadStatus === 'error'
+                          ? '#fef2f2'
+                          : '#fdf2f8',
+                        border: `1px solid ${uploadStatus === 'done' ? '#bbf7d0' : uploadStatus === 'error' ? '#fecaca' : '#fbcfe8'}`
+                      }}
+                    >
+                      {(isUploadingPhoto || uploadStatus === 'uploading') && (
+                        <p style={{ color: 'var(--rose-600)', fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                          ⏳ Upload et sauvegarde automatique en cours...
+                        </p>
+                      )}
+                      {uploadStatus === 'done' && !isUploadingPhoto && (
+                        <>
+                          <p style={{ color: '#16a34a', fontSize: '13px', fontWeight: '800', margin: '0 0 2px' }}>
+                            ✅ Photos sauvegardées automatiquement !
+                          </p>
+                          <p style={{ color: '#6b7280', fontSize: '11px', margin: 0 }}>
+                            Elles sont maintenant visibles sur tous les appareils 📱💻
+                          </p>
+                        </>
+                      )}
+                      {uploadStatus === 'error' && !isUploadingPhoto && (
+                        <p style={{ color: '#dc2626', fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                          ❌ Erreur lors de l'envoi. Vérifie ta connexion et réessaie.
+                        </p>
+                      )}
+                    </motion.div>
                   )}
+
+
 
                   {/* Grille de prévisualisation */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
