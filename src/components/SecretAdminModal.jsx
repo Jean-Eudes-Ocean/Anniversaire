@@ -174,30 +174,30 @@ export default function SecretAdminModal({
     setTimeout(() => setMusicUploadSuccess(false), 4000);
   };
 
-  // Réinitialiser la musique et revenir à la berceuse romantique par défaut
+  // Réinitialiser la musique et revenir à la chanson intégrée par défaut
   const handleResetMusic = async () => {
     if (previewPlaying && previewAudioRef.current) {
       previewAudioRef.current.pause();
       setPreviewPlaying(false);
     }
     await removePersistentAudio();
-    const defaultName = "Mélodie romantique féerique (intégrée)";
+    const defaultName = "Alex Warren - Ordinary (Chanson intégrée)";
     setMusicFileName(defaultName);
     if (typeof onMusicChange === 'function') {
-      onMusicChange(null, defaultName, null); // Réinitialise aussi cloudMusicUrl
+      onMusicChange(null, defaultName);
     }
   };
 
   // Lecture / Pause de l'aperçu audio dans le panneau admin
   const togglePreviewAudio = () => {
-    if (!currentMusicUrl) return;
+    const audioSrc = currentMusicUrl || '/song.mp3';
 
     if (!previewAudioRef.current) {
-      previewAudioRef.current = new Audio(currentMusicUrl);
+      previewAudioRef.current = new Audio(audioSrc);
       previewAudioRef.current.onended = () => setPreviewPlaying(false);
     } else {
-      if (previewAudioRef.current.src !== currentMusicUrl) {
-        previewAudioRef.current.src = currentMusicUrl;
+      if (previewAudioRef.current.src !== audioSrc && !previewAudioRef.current.src.endsWith(audioSrc)) {
+        previewAudioRef.current.src = audioSrc;
       }
     }
 
@@ -811,11 +811,10 @@ export default function SecretAdminModal({
                 <div>
                   <div style={{ background: '#fff5f8', padding: '14px', borderRadius: '14px', marginBottom: '18px', border: '1px solid #fbcfe8' }}>
                     <p style={{ fontSize: '13px', color: 'var(--rose-700)', margin: '0 0 6px', fontWeight: '700' }}>
-                      🎵 Musique d'ambiance romantique
+                      🎵 Musique d'ambiance officielle
                     </p>
                     <p style={{ fontSize: '12px', color: '#6b7280', margin: 0, lineHeight: 1.5 }}>
-                      Importe ta musique MP3. Elle sera sauvegardée localement sur cet appareil.
-                      Pour qu'elle fonctionne <strong>sur le téléphone de ta copine</strong>, utilise plutôt un <strong>lien web direct</strong> (section ci-dessous) ou assure-toi que le stockage Supabase est configuré.
+                      <strong>Alex Warren - Ordinary</strong> est désormais intégrée directement au site ! Elle est garantie de jouer instantanément sur son téléphone et sur tous les appareils, sans dépendre d'aucune base de données.
                     </p>
                   </div>
 
@@ -833,40 +832,38 @@ export default function SecretAdminModal({
                         <span style={{ fontSize: '26px' }}>🎧</span>
                         <div>
                           <p style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', fontWeight: '800', margin: 0 }}>
-                            Piste actuellement activée :
+                            Chanson d'amour intégrée :
                           </p>
                           <p style={{ fontSize: '14px', fontWeight: '800', color: 'var(--rose-700)', margin: '2px 0 0' }}>
-                            {musicFileName}
+                            {musicFileName || "Alex Warren - Ordinary"}
                           </p>
                         </div>
                       </div>
 
-                      {/* Mini lecteur d'écoute intégrée si custom audio */}
-                      {currentMusicUrl && (
-                        <button
-                          onClick={togglePreviewAudio}
-                          style={{
-                            padding: '8px 14px',
-                            background: previewPlaying ? '#ef4444' : 'var(--rose-600)',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '10px',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}
-                          title="Tester l'écoute de cette musique"
-                        >
-                          {previewPlaying ? '⏸ Pause' : '▶ Écouter'}
-                        </button>
-                      )}
+                      {/* Mini lecteur d'écoute intégrée */}
+                      <button
+                        onClick={togglePreviewAudio}
+                        style={{
+                          padding: '8px 14px',
+                          background: previewPlaying ? '#ef4444' : 'var(--rose-600)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        title="Tester l'écoute de cette musique"
+                      >
+                        {previewPlaying ? '⏸ Pause' : '▶ Écouter'}
+                      </button>
                     </div>
 
-                    {/* Bouton pour revenir à la mélodie douce */}
-                    {musicFileName !== "Mélodie romantique féerique (intégrée)" && (
+                    {/* Bouton pour revenir à la mélodie intégrée si personnalisée */}
+                    {customMusicUrl && (
                       <div style={{ borderTop: '1px solid #f9fafb', paddingTop: '10px', marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
                         <button 
                           onClick={handleResetMusic}
@@ -883,7 +880,7 @@ export default function SecretAdminModal({
                             gap: '4px'
                           }}
                         >
-                          ↺ Revenir à la mélodie par défaut
+                          ↺ Revenir à la chanson intégrée (Ordinary)
                         </button>
                       </div>
                     )}

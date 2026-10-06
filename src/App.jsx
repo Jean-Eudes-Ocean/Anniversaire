@@ -77,11 +77,7 @@ const DEFAULT_DATA = {
     "Des voyages magiques et des aventures inoubliables ensemble ✈️",
     "Mon amour infini, toujours à tes côtés quoi qu'il arrive 💖"
   ],
-  photos: [],
-  music: {
-    url: null,
-    name: "Mélodie romantique féerique"
-  }
+  photos: []
 };
 
 export default function App() {
@@ -97,14 +93,8 @@ export default function App() {
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [currentChapter, setCurrentChapter] = useState(1);
-  // customMusicUrl = URL de lecture locale (blob:// ou https://). NE JAMAIS envoyer blob:// à Supabase.
   const [customMusicUrl, setCustomMusicUrl] = useState(null);
-  const [customMusicName, setCustomMusicName] = useState(null);
-  // cloudMusicUrl = URL publique https:// uniquement (Supabase Storage). Peut être null.
-  const [cloudMusicUrl, setCloudMusicUrl] = useState(() => {
-    const savedMusic = siteData.music;
-    return savedMusic?.url?.startsWith('https://') ? savedMusic.url : null;
-  });
+  const [customMusicName, setCustomMusicName] = useState("Alex Warren - Ordinary (Chanson intégrée)");
   const [autoPlayMusic, setAutoPlayMusic] = useState(false);
   const [showGoldenFlash, setShowGoldenFlash] = useState(false);
 
@@ -116,51 +106,40 @@ export default function App() {
     setTimeout(() => setCurrentChapter(num), 150);
   }, []);
 
-  // Chargement persistant au démarrage (Musique + Configuration complète)
+  // Chargement persistant au démarrage (Textes, photos et configuration)
   useEffect(() => {
     async function initPersistentData() {
-      // 1. Charger la musique MP3 locale depuis IndexedDB (lecture sur cet appareil)
+      // 1. Audio personnalisé local (IndexedDB si l'utilisateur en a mis un)
       try {
         const savedAudio = await loadPersistentAudio();
         if (savedAudio && savedAudio.url) {
-          setCustomMusicUrl(savedAudio.url); // blob:// valide uniquement ici
+          setCustomMusicUrl(savedAudio.url);
           setCustomMusicName(savedAudio.name);
         }
       } catch (e) {
-        console.warn("Erreur chargement audio local:", e);
+        console.warn("Audio local:", e);
       }
 
-      // 2. Charger la config complète depuis IndexedDB
+      // 2. Configuration locale IndexedDB
       try {
         const idbConfig = await loadPersistentConfig();
         if (idbConfig) {
-          setSiteData(prev => ({ ...prev, ...idbConfig }));
-          // Si une URL cloud https:// était stockée localement, la charger
-          if (idbConfig.music?.url?.startsWith('https://')) {
-            setCloudMusicUrl(idbConfig.music.url);
-            setCustomMusicName(idbConfig.music.name);
-            // Si pas de fichier local, utiliser l'URL cloud pour la lecture
-            setCustomMusicUrl(prev => prev || idbConfig.music.url);
-          }
+          const { music: _ignored, ...cleanConfig } = idbConfig;
+          setSiteData(prev => ({ ...prev, ...cleanConfig }));
         }
       } catch (e) {
         console.warn("Erreur chargement config IndexedDB:", e);
       }
 
-      // 3. Sync Supabase — priorité sur tout. Charge textes ET URL musique cloud.
+      // 3. Synchronisation cloud Supabase (textes, photos, raisons, vœux)
       if (isSupabaseConfigured()) {
         try {
           const cloudConfig = await fetchBirthdayConfig();
           if (cloudConfig) {
-            const merged = { ...DEFAULT_DATA, ...cloudConfig };
+            // Nettoyage de l'éventuelle ancienne clé 'music'
+            const { music: _ignored, ...cleanCloudConfig } = cloudConfig;
+            const merged = { ...DEFAULT_DATA, ...cleanCloudConfig };
             setSiteData(merged);
-            // Restaurer la musique cloud si présente (URL https:// seulement)
-            if (cloudConfig.music?.url?.startsWith('https://')) {
-              setCloudMusicUrl(cloudConfig.music.url);
-              setCustomMusicName(cloudConfig.music.name);
-              // Si pas de fichier MP3 local sur cet appareil, lire la version cloud
-              setCustomMusicUrl(prev => prev || cloudConfig.music.url);
-            }
             localStorage.setItem('birthday_data_react', JSON.stringify(merged));
             await savePersistentConfig(merged);
           }
@@ -174,49 +153,30 @@ export default function App() {
   }, []);
 
   // Sauvegarde persistante (IndexedDB + LocalStorage + Supabase Cloud)
+  // AUCUNE musique n'est envoyée à Supabase : elle est déjà intégrée dans le site !
   const handleSaveData = async (newData) => {
-    // IMPORTANT : On ne sauvegarde JAMAIS une blob:// URL dans Supabase
-    // Les blob:// sont temporaires et propres à un seul onglet/appareil
-    const cloudUrl = cloudMusicUrl; // Uniquement https://
-    const cloudName = cloudUrl ? (customMusicName || newData.music?.name) : null;
+    const { music: _ignored, ...dataToSave } = newData;
 
-    const dataForCloud = {
-      ...newData,
-      music: {
-        url: cloudUrl || null,
-        name: cloudName || newData.music?.name || "Mélodie romantique féerique"
-      }
-    };
-
-    // Pour le stockage local (IndexedDB + localStorage), on peut garder + d'infos
-    const dataForLocal = {
-      ...newData,
-      music: {
-        url: cloudUrl || null, // Uniquement l'URL cloud pour que reload fonctionne
-        name: dataForCloud.music.name
-      }
-    };
-
-    setSiteData(dataForLocal);
+    setSiteData(dataToSave);
 
     // 1. LocalStorage
     try {
-      localStorage.setItem('birthday_data_react', JSON.stringify(dataForLocal));
+      localStorage.setItem('birthday_data_react', JSON.stringify(dataToSave));
     } catch (e) {
       console.warn("Storage save error:", e);
     }
 
     // 2. IndexedDB
     try {
-      await savePersistentConfig(dataForLocal);
+      await savePersistentConfig(dataToSave);
     } catch (e) {
       console.warn("IndexedDB save error:", e);
     }
 
-    // 3. Supabase Cloud — uniquement textes + URL cloud (jamais de blob://)
+    // 3. Supabase Cloud (Textes, photos, vœux, raisons uniquement - ultra rapide & léger)
     if (isSupabaseConfigured()) {
       try {
-        const result = await saveBirthdayConfig(dataForCloud);
+        const result = await saveBirthdayConfig(dataToSave);
         if (!result?.success) {
           console.warn("Avertissement sauvegarde Supabase:", result?.error);
         }
@@ -226,21 +186,15 @@ export default function App() {
     }
   };
 
-  // Appelé quand l'admin change de musique
-  // localUrl = blob:// ou https:// (pour écoute immédiate sur cet appareil)
-  // name = nom du fichier
-  // cloudUrlParam = https:// URL Supabase Storage (si upload réussi), sinon null
-  const handleMusicChange = (localUrl, name, cloudUrlParam) => {
-    setCustomMusicUrl(localUrl);   // Pour lecture audio locale immédiate
-    setCustomMusicName(name);
-    if (cloudUrlParam?.startsWith('https://')) {
-      setCloudMusicUrl(cloudUrlParam); // URL permanente sauvegardée dans Supabase
-    } else if (!localUrl) {
-      // Réinitialisation (retour mélodie par défaut)
-      setCloudMusicUrl(null);
+  // Changement de musique optionnel (reste en local / prévisualisation)
+  const handleMusicChange = (url, name) => {
+    if (url) {
+      setCustomMusicUrl(url);
+      setCustomMusicName(name || "Musique personnalisée");
+    } else {
+      setCustomMusicUrl(null);
+      setCustomMusicName("Alex Warren - Ordinary (Chanson intégrée)");
     }
-    // La sauvegarde Supabase se fait au clic sur "Enregistrer" dans l'admin, pas ici
-    // pour ne pas tenter d'écrire un blob:// immédiatement
   };
 
   const handleUnlockGateway = () => {

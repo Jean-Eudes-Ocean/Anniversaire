@@ -31,94 +31,51 @@ const MELODY = [
 
 export default function AudioPlayer({ customAudioUrl, autoPlayTrigger }) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const audioCtxRef = useRef(null);
-  const timerRef = useRef(null);
-  const noteIndexRef = useRef(0);
-  const customAudioRef = useRef(null);
+  const audioRef = useRef(null);
 
-  const initAudio = () => {
-    if (!audioCtxRef.current) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      audioCtxRef.current = new AudioCtx();
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
-    }
-  };
-
-  const playNote = (freq, duration) => {
-    if (!audioCtxRef.current || !isPlaying || customAudioUrl) return;
-    try {
-      const now = audioCtxRef.current.currentTime;
-      const osc = audioCtxRef.current.createOscillator();
-      const gain = audioCtxRef.current.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now);
-
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration + 0.5);
-
-      osc.connect(gain);
-      gain.connect(audioCtxRef.current.destination);
-
-      osc.start(now);
-      osc.stop(now + duration + 0.6);
-    } catch (e) {
-      console.warn("Audio note error:", e);
-    }
-  };
-
-  const loopMelody = () => {
-    if (!isPlaying || customAudioUrl) return;
-    const note = MELODY[noteIndexRef.current];
-    playNote(note.f, note.d);
-
-    noteIndexRef.current = (noteIndexRef.current + 1) % MELODY.length;
-    timerRef.current = setTimeout(loopMelody, note.d * 900);
-  };
+  const activeSrc = customAudioUrl || '/song.mp3';
 
   const togglePlay = () => {
-    initAudio();
-    setIsPlaying(prev => !prev);
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => {
+        console.warn("Audio play prevented:", err);
+      });
+    }
   };
 
+  // Lecture automatique dès déverrouillage du cœur (action utilisateur)
   useEffect(() => {
-    if (isPlaying) {
-      if (customAudioUrl && customAudioRef.current) {
-        customAudioRef.current.play().catch(() => {});
-      } else {
-        loopMelody();
-      }
-    } else {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (customAudioRef.current) customAudioRef.current.pause();
-    }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [isPlaying, customAudioUrl]);
-
-  // Déclencheur automatique au 10ème tap du cœur
-  useEffect(() => {
-    if (autoPlayTrigger) {
-      initAudio();
-      setIsPlaying(true);
+    if (autoPlayTrigger && audioRef.current) {
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => {
+        console.warn("Autoplay block:", err);
+      });
     }
   }, [autoPlayTrigger]);
 
   return (
     <div className="music-trigger">
-      {customAudioUrl && (
-        <audio ref={customAudioRef} src={customAudioUrl} loop preload="auto" />
-      )}
+      <audio 
+        ref={audioRef} 
+        src={activeSrc} 
+        loop 
+        preload="auto"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+      />
       <motion.button 
         className={`music-btn ${isPlaying ? 'playing' : ''}`}
         onClick={togglePlay}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
-        title={isPlaying ? "Mettre en pause la musique" : "Lancer la musique d'ambiance"}
+        title={isPlaying ? "Mettre en pause la musique" : "Lancer la musique d'ambiance (Alex Warren - Ordinary)"}
       >
         <div className="music-bars">
           <span className="music-bar bar-1"></span>
