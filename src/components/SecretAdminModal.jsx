@@ -73,20 +73,7 @@ export default function SecretAdminModal({
     }
   };
 
-  // Permet de taper le code au clavier physique ou via le pavé tactile
-  const handleKeyDownPin = (e) => {
-    if (e.key === 'Enter') {
-      handlePinSubmit();
-    } else if (e.key === 'Backspace') {
-      setPin(prev => prev.slice(0, -1));
-      setPinError(false);
-    } else if (/^[0-9]$/.test(e.key)) {
-      if (pin.length < 4) {
-        setPin(prev => prev + e.key);
-        setPinError(false);
-      }
-    }
-  };
+
 
   // Sauvegarde globale de toutes les modifications
   const handleSave = async () => {
@@ -195,7 +182,6 @@ export default function SecretAdminModal({
                   autoComplete="off"
                   maxLength={4}
                   value={pin}
-                  onKeyDown={handleKeyDownPin}
                   onChange={e => {
                     const val = e.target.value.replace(/\D/g, '').slice(0, 4);
                     setPin(val);
