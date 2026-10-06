@@ -51,10 +51,39 @@ function playTone({ freq = 440, duration = 0.3, gain = 0.08, type = 'sine', dela
 /**
  * 💓 Battement de cœur doux synchronisé avec chaque tap sur la passerelle
  */
+// Compteur global pour intensifier le battement progressivement
+let _heartbeatCount = 0;
+
+export function resetHeartbeatCount() {
+  _heartbeatCount = 0;
+}
+
+/**
+ * 💓 Battement de cœur progressif — s'intensifie à chaque tap
+ * lub-dub de plus en plus fort et profond
+ */
 export function playSFXHeartbeat() {
-  // Deux battements "lub-dub"
-  playTone({ freq: 60, duration: 0.15, gain: 0.14, type: 'sine', delay: 0 });
-  playTone({ freq: 50, duration: 0.22, gain: 0.09, type: 'sine', delay: 0.18 });
+  _heartbeatCount++;
+  const ctx = getCtx();
+  if (!ctx) return;
+
+  // Intensité croissante entre tap 1 et 10
+  const intensity = Math.min(1, 0.3 + (_heartbeatCount / 10) * 0.7);
+  const baseGain = 0.18 * intensity;
+
+  // "Lub" — battement principal (grave, fort)
+  playTone({ freq: 58,  duration: 0.14, gain: baseGain,        type: 'sine', delay: 0 });
+  // Harmonique chaude du lub
+  playTone({ freq: 116, duration: 0.12, gain: baseGain * 0.4,  type: 'sine', delay: 0 });
+
+  // "Dub" — deuxième battement légèrement plus haut
+  playTone({ freq: 52,  duration: 0.18, gain: baseGain * 0.75, type: 'sine', delay: 0.16 });
+  playTone({ freq: 104, duration: 0.14, gain: baseGain * 0.3,  type: 'sine', delay: 0.16 });
+
+  // Écho résonnant sur les derniers taps (à partir du tap 7)
+  if (_heartbeatCount >= 7) {
+    playTone({ freq: 46, duration: 0.28, gain: baseGain * 0.25, type: 'sine', delay: 0.38 });
+  }
 }
 
 /**

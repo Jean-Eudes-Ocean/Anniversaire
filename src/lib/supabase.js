@@ -150,10 +150,15 @@ export const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
 };
 
 /**
- * Upload d'une photo dans Supabase avec double sécurité :
- * 1. Tente l'upload dans Supabase Storage (nom propre sans caractères spéciaux).
- * 2. Si le stockage distant échoue (réseau, bucket, CORS), bascule automatiquement
- *    sur l'image compressée ultra-légère pour ne jamais bloquer l'utilisateur.
+ * Upload d'une photo dans Supabase Storage avec fallback robuste.
+ * Si le bucket 'birthday-photos' n'existe pas encore :
+ *   - L'image est compressée en JPEG (~150Ko)
+ *   - Convertie en base64 Data URL
+ *   - Cette URL est retournée et SERA sauvegardée dans Supabase config
+ *   - Donc visible sur tous les appareils via Supabase sync ✅
+ *
+ * Pour activer le stockage permanent (recommandé) :
+ * Dans Supabase Dashboard → Storage → New bucket → "birthday-photos" → Public ✅
  */
 export const uploadPhotoToSupabase = async (file) => {
   try {
@@ -178,17 +183,26 @@ export const uploadPhotoToSupabase = async (file) => {
             .getPublicUrl(filePath);
 
           if (data?.publicUrl) {
+            console.log('✅ Photo uploadée dans Supabase Storage:', data.publicUrl);
             return data.publicUrl;
           }
         } else {
-          console.warn("Storage upload notice:", uploadError);
+          // Détection précise : bucket manquant vs autre erreur
+          if (uploadError.message?.includes('Bucket not found') || uploadError.statusCode === '404') {
+            console.warn('⚠️ Bucket "birthday-photos" introuvable dans Supabase Storage.');
+            console.warn('👉 Pour l\'activer : Supabase Dashboard → Storage → New bucket → "birthday-photos" → cocher Public');
+            console.warn('📌 Fallback : la photo sera stockée en base64 dans Supabase config (visible sur tous les appareils)');
+          } else {
+            console.warn('Storage upload notice:', uploadError.message);
+          }
         }
       } catch (storageErr) {
-        console.warn("Storage exception, fallback to compressed image:", storageErr);
+        console.warn('Storage exception, fallback base64:', storageErr?.message || storageErr);
       }
     }
 
-    // Fallback ultra-fiable : convertit l'image DÉJÀ compressée (~150 Ko) en Data URL
+    // Fallback : image compressée en Data URL (~150Ko)
+    // Cette URL sera sauvegardée dans Supabase config → visible sur tous les appareils
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -196,7 +210,7 @@ export const uploadPhotoToSupabase = async (file) => {
       reader.readAsDataURL(fileToUpload instanceof Blob ? fileToUpload : file);
     });
   } catch (err) {
-    console.error("Erreur générale upload photo:", err);
+    console.error('Erreur générale upload photo:', err);
     return null;
   }
 };
