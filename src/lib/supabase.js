@@ -98,70 +98,105 @@ export const saveBirthdayConfig = async (configData) => {
 };
 
 /**
- * Compresse automatiquement une image côté client (max 1920px, JPEG 82%)
- * Divise la taille d'une photo de smartphone (10 Mo -> 300 Ko) en conservant une netteté cristalline.
+ * Compresse automatiquement une image côté client (max 1600px, JPEG 80%)
+ * Réduit une photo de smartphone de 12 Mo à ~150-250 Ko tout en gardant une netteté magnifique.
  */
-export const compressImage = (file, maxWidth = 1920, quality = 0.82) => {
+export const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
   if (!file || !file.type || !file.type.startsWith('image/')) return Promise.resolve(file);
   return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if (blob && blob.size < file.size) {
-            resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: 'image/jpeg' }));
-          } else {
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+              if (blob && blob.size < file.size) {
+                try {
+                  const newFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+                  resolve(newFile);
+                } catch {
+                  resolve(blob);
+                }
+              } else {
+                resolve(file);
+              }
+            }, 'image/jpeg', quality);
+          } catch {
             resolve(file);
           }
-        }, 'image/jpeg', quality);
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
       };
-      img.onerror = () => resolve(file);
-      img.src = e.target.result;
-    };
-    reader.onerror = () => resolve(file);
-    reader.readAsDataURL(file);
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    } catch {
+      resolve(file);
+    }
   });
 };
 
 /**
- * Upload d'une photo dans le bucket Supabase Storage 'birthday-photos'
- * avec compression automatique pour supporter des dizaines de photos sans aucun lag.
+ * Upload d'une photo dans Supabase avec double sécurité :
+ * 1. Tente l'upload dans Supabase Storage (nom propre sans caractères spéciaux).
+ * 2. Si le stockage distant échoue (réseau, bucket, CORS), bascule automatiquement
+ *    sur l'image compressée ultra-légère pour ne jamais bloquer l'utilisateur.
  */
 export const uploadPhotoToSupabase = async (file) => {
-  const supabase = getSupabaseClient();
-  if (!supabase) return null;
-
   try {
     const fileToUpload = await compressImage(file);
-    const fileExt = fileToUpload.name.split('.').pop() || 'jpg';
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-    const filePath = `photos/${fileName}`;
+    const cleanFileName = `photo-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.jpg`;
+    const filePath = `photos/${cleanFileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('birthday-photos')
-      .upload(filePath, fileToUpload, { cacheControl: '31536000', upsert: true });
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from('birthday-photos')
+          .upload(filePath, fileToUpload, { 
+            contentType: 'image/jpeg',
+            cacheControl: '31536000', 
+            upsert: true 
+          });
 
-    if (uploadError) throw uploadError;
+        if (!uploadError) {
+          const { data } = supabase.storage
+            .from('birthday-photos')
+            .getPublicUrl(filePath);
 
-    const { data } = supabase.storage
-      .from('birthday-photos')
-      .getPublicUrl(filePath);
+          if (data?.publicUrl) {
+            return data.publicUrl;
+          }
+        } else {
+          console.warn("Storage upload notice:", uploadError);
+        }
+      } catch (storageErr) {
+        console.warn("Storage exception, fallback to compressed image:", storageErr);
+      }
+    }
 
-    return data.publicUrl;
+    // Fallback ultra-fiable : convertit l'image DÉJÀ compressée (~150 Ko) en Data URL
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(fileToUpload instanceof Blob ? fileToUpload : file);
+    });
   } catch (err) {
-    console.error("Erreur upload photo Supabase:", err);
+    console.error("Erreur générale upload photo:", err);
     return null;
   }
 };
